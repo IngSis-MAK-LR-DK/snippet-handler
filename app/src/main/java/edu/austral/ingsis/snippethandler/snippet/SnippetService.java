@@ -12,8 +12,8 @@ import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.RuleType;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
-import edu.austral.ingsis.snippethandler.permission.Permission;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
+import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.rules.RuleService;
 
 import org.slf4j.Logger;
@@ -75,7 +75,7 @@ public class SnippetService {
     /** US 2 and 4: any field can change, the result must still be valid for its language. */
     @Transactional
     public SnippetDetail update(UUID id, SnippetUpdateRequest request) {
-        Snippet snippet = access.require(id, Permission.WRITE);
+        Snippet snippet = access.require(id, Role.OWNER);
         String current = contents.read(id);
         String content = Objects.requireNonNullElse(request.content(), current);
         String version =
@@ -111,7 +111,7 @@ public class SnippetService {
     /** US 6. */
     @Transactional(readOnly = true)
     public SnippetDetail get(UUID id) {
-        Snippet snippet = access.require(id, Permission.READ);
+        Snippet snippet = access.require(id, Role.READER);
         return SnippetDetail.of(snippet, contents.read(id));
     }
 
@@ -129,7 +129,7 @@ public class SnippetService {
 
     @Transactional
     public void delete(UUID id) {
-        Snippet snippet = access.require(id, Permission.OWNER);
+        Snippet snippet = access.require(id, Role.OWNER);
         repository.delete(snippet);
         permissions.removeSnippet(id);
         contents.deleteAfterCommit(id);
@@ -138,7 +138,7 @@ public class SnippetService {
     /** US 7: the target user gets read access over the snippet and its tests. */
     @Transactional(readOnly = true)
     public void share(UUID id, String userId) {
-        Snippet snippet = access.require(id, Permission.OWNER);
+        Snippet snippet = access.require(id, Role.OWNER);
         if (snippet.getOwnerId().equals(userId)) {
             throw new BadRequestException("A snippet cannot be shared with its owner");
         }
@@ -148,7 +148,7 @@ public class SnippetService {
     /** US 13: original or formatted with the owner's format rules. */
     @Transactional(readOnly = true)
     public SnippetFile download(UUID id, boolean formatted) {
-        Snippet snippet = access.require(id, Permission.READ);
+        Snippet snippet = access.require(id, Role.READER);
         LanguageService language = languages.get(snippet.getLanguage());
         String content = contents.read(id);
         if (formatted) {
@@ -160,7 +160,7 @@ public class SnippetService {
     /** Applies the owner's format rules and stores the result. */
     @Transactional
     public SnippetDetail format(UUID id) {
-        Snippet snippet = access.require(id, Permission.WRITE);
+        Snippet snippet = access.require(id, Role.OWNER);
         LanguageService language = languages.get(snippet.getLanguage());
         String current = contents.read(id);
         String formatted = format(snippet, language, current);

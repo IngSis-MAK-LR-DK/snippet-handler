@@ -1,9 +1,12 @@
 package edu.austral.ingsis.snippethandler.permission;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -16,7 +19,7 @@ import org.springframework.web.client.RestClientException;
  */
 public class HttpPermissionService implements PermissionService {
 
-    private static final String SNIPPET_PATH = "/permissions/snippets/{id}";
+    private static final String SNIPPET_PATH = "/permissions/{snippetId}";
 
     private final RestClient client;
 
@@ -30,56 +33,61 @@ public class HttpPermissionService implements PermissionService {
                 "register owner of " + snippetId,
                 () ->
                         client.post()
-                                .uri(SNIPPET_PATH + "/owner", snippetId)
+                                .uri("/permissions")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .body(new RegisterRequest(snippetId.toString()))
                                 .retrieve()
                                 .toBodilessEntity());
     }
 
     @Override
-    public boolean hasPermission(UUID snippetId, Permission permission) {
+    public Role roleOf(UUID snippetId) {
         try {
-            CheckResponse response =
-                    client.get()
-                            .uri(
-                                    SNIPPET_PATH + "/check?permission={permission}",
-                                    snippetId,
-                                    permission)
-                            .retrieve()
-                            .body(CheckResponse.class);
-            return response != null && response.allowed();
+            RoleResponse response =
+                    client.get().uri(SNIPPET_PATH, snippetId).retrieve().body(RoleResponse.class);
+            return response == null || response.role() == null ? Role.NONE : response.role();
         } catch (HttpClientErrorException.NotFound | HttpClientErrorException.Forbidden e) {
-            return false;
+            return Role.NONE;
         } catch (RestClientException e) {
-            throw failure("check permission over " + snippetId, e);
+            throw failure("check role over " + snippetId, e);
         }
     }
 
     @Override
     public void share(UUID snippetId, String userId) {
-        call(
-                "share " + snippetId,
-                () ->
-                        client.post()
-                                .uri(SNIPPET_PATH + "/shares", snippetId)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .body(new ShareRequest(userId))
-                                .retrieve()
-                                .toBodilessEntity());
+        try {
+            client.post()
+                    .uri(SNIPPET_PATH + "/share", snippetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new ShareRequest(userId))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode() != HttpStatus.CONFLICT) {
+                throw clientError("share " + snippetId, e);
+            }
+        } catch (RestClientException e) {
+            throw failure("share " + snippetId, e);
+        }
     }
 
     @Override
     public List<UUID> accessibleSnippets(Relation relation) {
-        SnippetIdsResponse response =
+        SnippetAccess[] response =
                 call(
                         "list snippets",
                         () ->
                                 client.get()
-                                        .uri("/permissions/snippets?relation={relation}", relation)
+                                        .uri(
+                                                "/permissions/snippets?relation={relation}",
+                                                relation.name().toLowerCase(Locale.ROOT))
                                         .retrieve()
-                                        .body(SnippetIdsResponse.class));
-        return response == null || response.snippetIds() == null
+                                        .body(SnippetAccess[].class));
+        return response == null
                 ? List.of()
-                : List.copyOf(response.snippetIds());
+                : Arrays.stream(response)
+                        .map(access -> UUID.fromString(access.snippetId()))
+                        .toList();
     }
 
     @Override
@@ -92,18 +100,29 @@ public class HttpPermissionService implements PermissionService {
     private <T> T call(String operation, Supplier<T> request) {
         try {
             return request.get();
+        } catch (HttpClientErrorException e) {
+            throw clientError(operation, e);
         } catch (RestClientException e) {
             throw failure(operation, e);
         }
+    }
+
+    private static RuntimeException clientError(String operation, HttpClientErrorException e) {
+        if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
+            return new PermissionDeniedException("Permission service refused to " + operation, e);
+        }
+        return failure(operation, e);
     }
 
     private static PermissionServiceException failure(String operation, RestClientException e) {
         return new PermissionServiceException("Permission service failed to " + operation, e);
     }
 
-    record CheckResponse(boolean allowed) {}
+    record RegisterRequest(String snippetId) {}
+
+    record RoleResponse(Role role) {}
 
     record ShareRequest(String userId) {}
 
-    record SnippetIdsResponse(List<UUID> snippetIds) {}
+    record SnippetAccess(String snippetId, Role role) {}
 }

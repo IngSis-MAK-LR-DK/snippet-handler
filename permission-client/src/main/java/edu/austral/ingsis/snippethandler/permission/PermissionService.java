@@ -12,9 +12,13 @@ public interface PermissionService {
     /** Registers the current user as the owner of a new snippet. */
     void registerOwner(UUID snippetId);
 
-    boolean hasPermission(UUID snippetId, Permission permission);
+    /** Role of the current user over the snippet; {@link Role#NONE} if they have no access. */
+    Role roleOf(UUID snippetId);
 
-    /** Grants read access over the snippet (and its tests) to another user. */
+    /**
+     * Gives another user read access over the snippet and its tests. Sharing again with the same
+     * user is not an error.
+     */
     void share(UUID snippetId, String userId);
 
     /** Ids of the snippets the current user can access through the given relation. */

@@ -7,7 +7,7 @@ import edu.austral.ingsis.snippethandler.error.NotFoundException;
 import edu.austral.ingsis.snippethandler.language.ExecutionResult;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
-import edu.austral.ingsis.snippethandler.permission.Permission;
+import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
 import edu.austral.ingsis.snippethandler.snippet.SnippetAccess;
 import edu.austral.ingsis.snippethandler.snippet.SnippetContents;
@@ -41,7 +41,7 @@ public class TestCaseService {
 
     @Transactional(readOnly = true)
     public List<TestCaseView> list(UUID snippetId) {
-        access.require(snippetId, Permission.READ);
+        access.require(snippetId, Role.READER);
         return repository.findAllBySnippetIdOrderByCreatedAtAsc(snippetId).stream()
                 .map(TestCaseView::of)
                 .toList();
@@ -49,7 +49,7 @@ public class TestCaseService {
 
     @Transactional
     public TestCaseView create(UUID snippetId, TestCaseRequest request) {
-        access.require(snippetId, Permission.WRITE);
+        access.require(snippetId, Role.OWNER);
         TestCase test =
                 new TestCase(
                         snippetId, request.name(), request.inputs(), request.expectedOutputs());
@@ -58,7 +58,7 @@ public class TestCaseService {
 
     @Transactional
     public TestCaseView update(UUID snippetId, UUID testId, TestCaseRequest request) {
-        access.require(snippetId, Permission.WRITE);
+        access.require(snippetId, Role.OWNER);
         TestCase test = find(snippetId, testId);
         test.redefine(request.name(), request.inputs(), request.expectedOutputs());
         return TestCaseView.of(repository.save(test));
@@ -66,14 +66,14 @@ public class TestCaseService {
 
     @Transactional
     public void delete(UUID snippetId, UUID testId) {
-        access.require(snippetId, Permission.WRITE);
+        access.require(snippetId, Role.OWNER);
         repository.delete(find(snippetId, testId));
     }
 
     /** Anyone who can read the snippet can run its tests. */
     @Transactional
     public TestRunResult run(UUID snippetId, UUID testId) {
-        Snippet snippet = access.require(snippetId, Permission.READ);
+        Snippet snippet = access.require(snippetId, Role.READER);
         return run(snippet, contents.read(snippetId), find(snippetId, testId));
     }
 

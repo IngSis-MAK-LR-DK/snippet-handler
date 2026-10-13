@@ -7,6 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.forbidden;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.notFound;
+import static com.github.tomakehurst.wiremock.client.WireMock.ok;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -14,6 +15,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,7 +36,7 @@ import org.springframework.web.client.RestClient;
 class HttpPermissionServiceTest {
 
     private static final UUID ID = UUID.fromString("7c3e9f1a-0000-4000-8000-000000000001");
-    private static final String PATH = "/permissions/snippets/" + ID;
+    private static final String PATH = "/permissions/" + ID;
 
     private HttpPermissionService service;
 
@@ -54,70 +56,96 @@ class HttpPermissionServiceTest {
 
     @Test
     void registersOwner() {
-        stubFor(post(PATH + "/owner").willReturn(aResponse().withStatus(201)));
+        stubFor(post("/permissions").willReturn(aResponse().withStatus(201)));
 
         service.registerOwner(ID);
 
-        verify(postRequestedFor(urlEqualTo(PATH + "/owner")));
+        verify(
+                postRequestedFor(urlEqualTo("/permissions"))
+                        .withRequestBody(equalToJson("{\"snippetId\": \"" + ID + "\"}")));
     }
 
     @Test
-    void registerOwnerFailureIsWrapped() {
-        stubFor(post(PATH + "/owner").willReturn(serverError()));
+    void registerOwnerConflictIsAFailure() {
+        stubFor(post("/permissions").willReturn(aResponse().withStatus(409)));
 
         assertThrows(PermissionServiceException.class, () -> service.registerOwner(ID));
     }
 
     @Test
-    void checksPermission() {
-        stubFor(
-                get(urlEqualTo(PATH + "/check?permission=WRITE"))
-                        .willReturn(okJson("{\"allowed\": true}")));
-        stubFor(
-                get(urlEqualTo(PATH + "/check?permission=OWNER"))
-                        .willReturn(okJson("{\"allowed\": false}")));
+    void readsRole() {
+        stubFor(get(PATH).willReturn(okJson("{\"role\": \"READER\"}")));
 
-        assertTrue(service.hasPermission(ID, Permission.WRITE));
-        assertFalse(service.hasPermission(ID, Permission.OWNER));
+        assertEquals(Role.READER, service.roleOf(ID));
     }
 
     @Test
-    void unknownOrForbiddenSnippetHasNoPermission() {
-        stubFor(get(urlEqualTo(PATH + "/check?permission=READ")).willReturn(notFound()));
-        assertFalse(service.hasPermission(ID, Permission.READ));
+    void missingRoleIsNone() {
+        stubFor(get(PATH).willReturn(okJson("{}")));
+        assertEquals(Role.NONE, service.roleOf(ID));
 
-        stubFor(get(urlEqualTo(PATH + "/check?permission=READ")).willReturn(forbidden()));
-        assertFalse(service.hasPermission(ID, Permission.READ));
+        stubFor(get(PATH).willReturn(ok()));
+        assertEquals(Role.NONE, service.roleOf(ID));
     }
 
     @Test
-    void checkFailureIsWrapped() {
-        stubFor(get(urlEqualTo(PATH + "/check?permission=READ")).willReturn(serverError()));
+    void unknownOrForbiddenSnippetIsNone() {
+        stubFor(get(PATH).willReturn(notFound()));
+        assertEquals(Role.NONE, service.roleOf(ID));
 
-        assertThrows(
-                PermissionServiceException.class, () -> service.hasPermission(ID, Permission.READ));
+        stubFor(get(PATH).willReturn(forbidden()));
+        assertEquals(Role.NONE, service.roleOf(ID));
+    }
+
+    @Test
+    void roleFailureIsWrapped() {
+        stubFor(get(PATH).willReturn(serverError()));
+
+        assertThrows(PermissionServiceException.class, () -> service.roleOf(ID));
     }
 
     @Test
     void sharesWithUser() {
-        stubFor(post(PATH + "/shares").willReturn(aResponse().withStatus(201)));
+        stubFor(post(PATH + "/share").willReturn(aResponse().withStatus(204)));
 
         service.share(ID, "auth0|bob");
 
         verify(
-                postRequestedFor(urlEqualTo(PATH + "/shares"))
+                postRequestedFor(urlEqualTo(PATH + "/share"))
                         .withRequestBody(equalToJson("{\"userId\": \"auth0|bob\"}")));
+    }
+
+    @Test
+    void sharingTwiceIsNotAnError() {
+        stubFor(post(PATH + "/share").willReturn(aResponse().withStatus(409)));
+
+        assertDoesNotThrow(() -> service.share(ID, "auth0|bob"));
+    }
+
+    @Test
+    void shareRefusedOrFailing() {
+        stubFor(post(PATH + "/share").willReturn(forbidden()));
+        assertThrows(PermissionDeniedException.class, () -> service.share(ID, "auth0|bob"));
+
+        stubFor(post(PATH + "/share").willReturn(aResponse().withStatus(400)));
+        assertThrows(PermissionServiceException.class, () -> service.share(ID, "auth0|bob"));
+
+        stubFor(post(PATH + "/share").willReturn(serverError()));
+        assertThrows(PermissionServiceException.class, () -> service.share(ID, "auth0|bob"));
     }
 
     @Test
     void listsAccessibleSnippets() {
         stubFor(
-                get(urlEqualTo("/permissions/snippets?relation=SHARED"))
-                        .willReturn(okJson("{\"snippetIds\": [\"" + ID + "\"]}")));
-        stubFor(get(urlEqualTo("/permissions/snippets?relation=OWNED")).willReturn(okJson("{}")));
+                get(urlEqualTo("/permissions/snippets?relation=shared"))
+                        .willReturn(
+                                okJson("[{\"snippetId\": \"" + ID + "\", \"role\": \"READER\"}]")));
+        stubFor(get(urlEqualTo("/permissions/snippets?relation=owner")).willReturn(okJson("[]")));
+        stubFor(get(urlEqualTo("/permissions/snippets?relation=all")).willReturn(ok()));
 
         assertEquals(List.of(ID), service.accessibleSnippets(Relation.SHARED));
-        assertEquals(List.of(), service.accessibleSnippets(Relation.OWNED));
+        assertEquals(List.of(), service.accessibleSnippets(Relation.OWNER));
+        assertEquals(List.of(), service.accessibleSnippets(Relation.ALL));
     }
 
     @Test
@@ -127,5 +155,20 @@ class HttpPermissionServiceTest {
         service.removeSnippet(ID);
 
         verify(deleteRequestedFor(urlEqualTo(PATH)));
+    }
+
+    @Test
+    void removeRefusedIsDenied() {
+        stubFor(delete(PATH).willReturn(forbidden()));
+
+        assertThrows(PermissionDeniedException.class, () -> service.removeSnippet(ID));
+    }
+
+    @Test
+    void rolesAreOrdered() {
+        assertTrue(Role.OWNER.atLeast(Role.READER));
+        assertTrue(Role.READER.atLeast(Role.READER));
+        assertFalse(Role.READER.atLeast(Role.OWNER));
+        assertFalse(Role.NONE.atLeast(Role.READER));
     }
 }

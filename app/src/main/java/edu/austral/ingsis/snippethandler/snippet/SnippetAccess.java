@@ -4,8 +4,8 @@ import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.error.ForbiddenException;
 import edu.austral.ingsis.snippethandler.error.NotFoundException;
-import edu.austral.ingsis.snippethandler.permission.Permission;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
+import edu.austral.ingsis.snippethandler.permission.Role;
 
 import org.springframework.stereotype.Component;
 
@@ -22,15 +22,15 @@ public class SnippetAccess {
     }
 
     /**
-     * Permission is checked before existence so that users cannot probe which ids exist.
+     * Role is checked before existence so that users cannot probe which ids exist.
      *
-     * @throws ForbiddenException if the current user lacks {@code permission}
+     * @throws ForbiddenException if the current user's role is below {@code required}
      * @throws NotFoundException if the snippet does not exist
      */
-    public Snippet require(UUID snippetId, Permission permission) {
-        if (!permissions.hasPermission(snippetId, permission)) {
+    public Snippet require(UUID snippetId, Role required) {
+        if (!permissions.roleOf(snippetId).atLeast(required)) {
             throw new ForbiddenException(
-                    "Missing %s permission over snippet %s".formatted(permission, snippetId));
+                    "%s role required over snippet %s".formatted(required, snippetId));
         }
         return find(snippetId);
     }

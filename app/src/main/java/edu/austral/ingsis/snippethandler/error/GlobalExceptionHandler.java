@@ -3,6 +3,7 @@ package edu.austral.ingsis.snippethandler.error;
 import edu.austral.ingsis.snippethandler.asset.AssetStoreException;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.UnsupportedLanguageException;
+import edu.austral.ingsis.snippethandler.permission.PermissionDeniedException;
 import edu.austral.ingsis.snippethandler.permission.PermissionServiceException;
 
 import org.slf4j.Logger;
@@ -32,8 +33,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, e);
     }
 
-    @ExceptionHandler(ForbiddenException.class)
-    public ProblemDetail forbidden(ForbiddenException e) {
+    @ExceptionHandler({ForbiddenException.class, PermissionDeniedException.class})
+    public ProblemDetail forbidden(RuntimeException e) {
         return problem(HttpStatus.FORBIDDEN, e);
     }
 

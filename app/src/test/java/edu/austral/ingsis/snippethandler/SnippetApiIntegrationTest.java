@@ -69,6 +69,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class SnippetApiIntegrationTest {
 
     private static final String ALICE = "auth0|alice";
+    private static final String SNIPPET_PERMISSION = "/permissions/[0-9a-f-]{36}";
     private static final String VALID_SOURCE =
             "let greeting: string = \"hi\";\nprintln(greeting);\n";
 
@@ -111,17 +112,15 @@ class SnippetApiIntegrationTest {
         assets.clear();
         SERVICES.resetAll();
 
+        SERVICES.stubFor(post(urlEqualTo("/permissions")).willReturn(aResponse().withStatus(201)));
         SERVICES.stubFor(
-                post(urlPathMatching("/permissions/snippets/.*/owner"))
-                        .willReturn(aResponse().withStatus(201)));
+                get(urlPathMatching(SNIPPET_PERMISSION))
+                        .willReturn(okJson("{\"role\": \"OWNER\"}")));
         SERVICES.stubFor(
-                get(urlPathMatching("/permissions/snippets/.*/check"))
-                        .willReturn(okJson("{\"allowed\": true}")));
+                post(urlPathMatching(SNIPPET_PERMISSION + "/share"))
+                        .willReturn(aResponse().withStatus(204)));
         SERVICES.stubFor(
-                post(urlPathMatching("/permissions/snippets/.*/shares"))
-                        .willReturn(aResponse().withStatus(201)));
-        SERVICES.stubFor(
-                delete(urlPathMatching("/permissions/snippets/.*"))
+                delete(urlPathMatching(SNIPPET_PERMISSION))
                         .willReturn(aResponse().withStatus(204)));
 
         SERVICES.stubFor(
@@ -206,8 +205,9 @@ class SnippetApiIntegrationTest {
         String id = json.readTree(body).get("id").asText();
         assertThat(assets.get(id)).contains(VALID_SOURCE);
         SERVICES.verify(
-                postRequestedFor(urlEqualTo("/permissions/snippets/" + id + "/owner"))
-                        .withHeader("Authorization", equalTo("Bearer token")));
+                postRequestedFor(urlEqualTo("/permissions"))
+                        .withHeader("Authorization", equalTo("Bearer token"))
+                        .withRequestBody(equalToJson("{\"snippetId\": \"" + id + "\"}")));
     }
 
     @Test
@@ -245,8 +245,7 @@ class SnippetApiIntegrationTest {
 
     @Test
     void undoesEverythingWhenPermissionsServiceFails() throws Exception {
-        SERVICES.stubFor(
-                post(urlPathMatching("/permissions/snippets/.*/owner")).willReturn(serverError()));
+        SERVICES.stubFor(post(urlEqualTo("/permissions")).willReturn(serverError()));
 
         mvc.perform(as(postJson("/snippets", snippetJson("Hello", VALID_SOURCE))))
                 .andExpect(status().isBadGateway());
@@ -256,7 +255,7 @@ class SnippetApiIntegrationTest {
     }
 
     @Test
-    void getsSnippetOnlyWithPermission() throws Exception {
+    void readersCanReadButNotModify() throws Exception {
         String id = createSnippet("Hello", VALID_SOURCE);
 
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
@@ -265,8 +264,13 @@ class SnippetApiIntegrationTest {
                 .andExpect(jsonPath("$.content").value(VALID_SOURCE));
 
         SERVICES.stubFor(
-                get(urlPathMatching("/permissions/snippets/" + id + "/check"))
-                        .willReturn(okJson("{\"allowed\": false}")));
+                get(urlEqualTo("/permissions/" + id)).willReturn(okJson("{\"role\": \"READER\"}")));
+        mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id))).andExpect(status().isOk());
+        mvc.perform(as(MockMvcRequestBuilders.delete("/snippets/" + id)))
+                .andExpect(status().isForbidden());
+
+        SERVICES.stubFor(
+                get(urlEqualTo("/permissions/" + id)).willReturn(okJson("{\"role\": \"NONE\"}")));
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
                 .andExpect(status().isForbidden());
     }
@@ -341,14 +345,16 @@ class SnippetApiIntegrationTest {
         String snake = createSnippet("Another", "let snake_case = 1;");
         createSnippet("Hidden", VALID_SOURCE);
         SERVICES.stubFor(
-                get(urlEqualTo("/permissions/snippets?relation=ALL"))
+                get(urlEqualTo("/permissions/snippets?relation=all"))
                         .willReturn(
                                 okJson(
-                                        "{\"snippetIds\": [\"%s\", \"%s\"]}"
+                                        """
+                                        [{"snippetId": "%s", "role": "OWNER"},
+                                         {"snippetId": "%s", "role": "READER"}]
+                                        """
                                                 .formatted(hello, snake))));
         SERVICES.stubFor(
-                get(urlEqualTo("/permissions/snippets?relation=SHARED"))
-                        .willReturn(okJson("{\"snippetIds\": []}")));
+                get(urlEqualTo("/permissions/snippets?relation=shared")).willReturn(okJson("[]")));
 
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets").param("sort", "name,desc")))
                 .andExpect(status().isOk())
@@ -379,7 +385,7 @@ class SnippetApiIntegrationTest {
         mvc.perform(as(postJson("/snippets/" + id + "/share", "{\"userId\": \"auth0|bob\"}")))
                 .andExpect(status().isNoContent());
         SERVICES.verify(
-                postRequestedFor(urlEqualTo("/permissions/snippets/" + id + "/shares"))
+                postRequestedFor(urlEqualTo("/permissions/" + id + "/share"))
                         .withRequestBody(equalToJson("{\"userId\": \"auth0|bob\"}")));
 
         mvc.perform(as(postJson("/snippets/" + id + "/share", "{\"userId\": \"" + ALICE + "\"}")))

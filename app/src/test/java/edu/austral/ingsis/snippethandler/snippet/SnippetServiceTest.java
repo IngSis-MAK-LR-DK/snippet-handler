@@ -26,9 +26,9 @@ import edu.austral.ingsis.snippethandler.language.RuleType;
 import edu.austral.ingsis.snippethandler.language.SyntaxError;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.language.Violation;
-import edu.austral.ingsis.snippethandler.permission.Permission;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Relation;
+import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.rules.RuleService;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -135,7 +135,7 @@ class SnippetServiceTest {
     @Test
     void metadataOnlyUpdateSkipsValidationAndTests() {
         Snippet snippet = existing();
-        when(access.require(ID, Permission.WRITE)).thenReturn(snippet);
+        when(access.require(ID, Role.OWNER)).thenReturn(snippet);
         when(contents.read(ID)).thenReturn("x;");
 
         SnippetDetail detail =
@@ -150,7 +150,7 @@ class SnippetServiceTest {
 
     @Test
     void contentUpdateValidatesStoresAndRunsTests() {
-        when(access.require(ID, Permission.WRITE)).thenReturn(existing());
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
         when(contents.read(ID)).thenReturn("x;");
 
         service.update(ID, new SnippetUpdateRequest(null, null, null, null, "y;"));
@@ -162,7 +162,7 @@ class SnippetServiceTest {
 
     @Test
     void versionChangeRevalidatesSameContent() {
-        when(access.require(ID, Permission.WRITE)).thenReturn(existing());
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
         when(contents.read(ID)).thenReturn("x;");
 
         SnippetDetail detail =
@@ -176,7 +176,7 @@ class SnippetServiceTest {
 
     @Test
     void invalidUpdateKeepsSnippetUnchanged() {
-        when(access.require(ID, Permission.WRITE)).thenReturn(existing());
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
         when(contents.read(ID)).thenReturn("x;");
         when(printScript.validate("bad", "1.0"))
                 .thenReturn(ValidationResult.invalid(List.of(new SyntaxError("r", "m", 1, 1))));
@@ -206,7 +206,7 @@ class SnippetServiceTest {
 
     @Test
     void cannotShareWithOwner() {
-        when(access.require(ID, Permission.OWNER)).thenReturn(existing());
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
 
         assertThatThrownBy(() -> service.share(ID, OWNER)).isInstanceOf(BadRequestException.class);
         verify(permissions, never()).share(any(), any());
@@ -215,7 +215,7 @@ class SnippetServiceTest {
     @Test
     void downloadUsesOwnerFormatRules() {
         Snippet snippet = existing();
-        when(access.require(ID, Permission.READ)).thenReturn(snippet);
+        when(access.require(ID, Role.READER)).thenReturn(snippet);
         when(contents.read(ID)).thenReturn("x;");
         when(rules.enabledRules(OWNER, printScript, RuleType.FORMAT)).thenReturn(List.of());
         when(printScript.format("x;", "1.0", List.of())).thenReturn("x ;");
@@ -226,7 +226,7 @@ class SnippetServiceTest {
 
     @Test
     void formatWithoutChangesDoesNotWrite() {
-        when(access.require(ID, Permission.WRITE)).thenReturn(existing());
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
         when(contents.read(ID)).thenReturn("x;");
         when(printScript.format(eq("x;"), eq("1.0"), anyList())).thenReturn("x;");
 

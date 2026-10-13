@@ -32,7 +32,7 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 | `POST /snippets` (multipart `file` + `name`, `description`, `language`, `version`) | 1 |
 | `POST /snippets` (JSON con `content`) | 3 |
 | `PUT /snippets/{id}` (multipart o JSON, todos los campos opcionales) | 2, 4 |
-| `GET /snippets?relation=OWNED\|SHARED\|ALL&name=&language=&compliance=&sort=name,asc&page=&size=` | 5 |
+| `GET /snippets?relation=OWNER\|SHARED\|ALL&name=&language=&compliance=&sort=name,asc&page=&size=` | 5 |
 | `GET /snippets/{id}` | 6 |
 | `DELETE /snippets/{id}` | |
 | `POST /snippets/{id}/share` `{"userId": "..."}` | 7 |
@@ -74,5 +74,12 @@ GITHUB_ACTOR=<usuario> GITHUB_TOKEN=<pat> docker compose up --build
 curl localhost:8080/actuator/health
 ```
 
-Permisos y el adaptador de PrintScript se esperan en `localhost:8082` y `localhost:8083`
-(configurable en `.env`).
+| Servicio | Puerto en el host |
+|---|---|
+| Snippet Handler | 8080 |
+| Permisos | 8081 (su Postgres en 5434) |
+| Asset service (bucket) | 8082 |
+| Adaptador PrintScript | 8083 |
+| Postgres del handler | 5433 |
+
+Permisos y el adaptador corren desde sus propios repos; las URLs se cambian en `.env`.
