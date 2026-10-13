@@ -20,6 +20,7 @@ import edu.austral.ingsis.snippethandler.language.RuleType;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionOperations;
 
 class RuleServiceTest {
 
@@ -42,6 +43,7 @@ class RuleServiceTest {
                 new RuleService(
                         repository,
                         new LanguageRegistry(List.of(printScript)),
+                        TransactionOperations.withoutTransaction(),
                         new SnippetProperties("printscript", null, null, null, null));
     }
 
@@ -68,6 +70,24 @@ class RuleServiceTest {
                 .containsExactly(
                         new RuleView("indentation", "Spaces", false, "4"),
                         new RuleView("space-around-colon", "Colon", true, "1"));
+    }
+
+    @Test
+    void updateStoresOnlyWhatChanged() {
+        when(repository.findAllByUserIdAndType(USER, RuleType.FORMAT)).thenReturn(List.of());
+
+        List<RuleView> rules =
+                service.update(
+                        USER,
+                        null,
+                        RuleType.FORMAT,
+                        List.of(new RuleConfig("indentation", true, "2")));
+
+        assertThat(rules)
+                .containsExactly(
+                        new RuleView("indentation", "Spaces", true, "2"),
+                        new RuleView("space-around-colon", "Colon", false, null));
+        verify(repository).save(any());
     }
 
     @Test

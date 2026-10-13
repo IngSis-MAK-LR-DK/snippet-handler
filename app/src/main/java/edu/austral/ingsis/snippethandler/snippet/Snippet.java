@@ -81,14 +81,9 @@ public class Snippet {
         this.languageVersion = languageVersion;
     }
 
-    public void lintPassed(List<Violation> violations) {
-        this.lintViolations = new ArrayList<>(violations);
-        this.compliance = violations.isEmpty() ? Compliance.COMPLIANT : Compliance.NOT_COMPLIANT;
-    }
-
-    public void lintFailed() {
-        this.lintViolations = new ArrayList<>();
-        this.compliance = Compliance.FAILED;
+    public void linted(LintReport report) {
+        this.lintViolations = new ArrayList<>(report.violations());
+        this.compliance = report.compliance();
     }
 
     @PrePersist

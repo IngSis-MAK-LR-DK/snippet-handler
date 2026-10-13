@@ -18,11 +18,19 @@ public record SnippetProperties(
         languages = languages == null ? Map.of() : Map.copyOf(languages);
     }
 
-    public record Cors(List<String> allowedOrigins) {}
+    public record Cors(List<String> allowedOrigins) {
+        public Cors {
+            allowedOrigins = allowedOrigins == null ? List.of() : List.copyOf(allowedOrigins);
+        }
+    }
 
     public record Asset(String url, String container) {}
 
     public record Permission(String url) {}
 
-    public record Language(String url, List<String> versions, String fileExtension) {}
+    public record Language(String url, List<String> versions, String fileExtension) {
+        public Language {
+            versions = versions == null ? List.of() : List.copyOf(versions);
+        }
+    }
 }

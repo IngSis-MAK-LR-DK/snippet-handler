@@ -22,23 +22,17 @@ import edu.austral.ingsis.snippethandler.events.SnippetEventPublisher;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
-import edu.austral.ingsis.snippethandler.language.RuleType;
 import edu.austral.ingsis.snippethandler.language.SyntaxError;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.language.Violation;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
-import edu.austral.ingsis.snippethandler.permission.Relation;
 import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.rules.RuleService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionOperations;
 
 class SnippetServiceTest {
 
@@ -62,21 +56,23 @@ class SnippetServiceTest {
         when(printScript.fileExtension()).thenReturn("ps");
         when(printScript.validate(anyString(), anyString())).thenReturn(ValidationResult.ok());
         when(printScript.lint(anyString(), anyString(), anyList())).thenReturn(List.of());
-        when(repository.save(any()))
+        when(repository.saveAndFlush(any()))
                 .thenAnswer(
                         invocation -> {
                             Snippet snippet = invocation.getArgument(0);
                             ReflectionTestUtils.setField(snippet, "id", ID);
                             return snippet;
                         });
+        SnippetStyle style = new SnippetStyle(rules);
         service =
                 new SnippetService(
-                        repository,
+                        new SnippetStore(
+                                repository, contents, TransactionOperations.withoutTransaction()),
                         access,
                         contents,
+                        style,
                         new LanguageRegistry(List.of(printScript)),
                         permissions,
-                        rules,
                         events);
     }
 
@@ -105,7 +101,7 @@ class SnippetServiceTest {
                 .isInstanceOfSatisfying(
                         InvalidSnippetException.class,
                         e -> assertThat(e.getErrors()).containsExactly(error));
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
         verifyNoInteractions(contents, permissions);
     }
 
@@ -191,37 +187,11 @@ class SnippetServiceTest {
     }
 
     @Test
-    void listWithoutAccessibleSnippetsSkipsQuery() {
-        when(permissions.accessibleSnippets(Relation.SHARED)).thenReturn(List.of());
-
-        Page<SnippetSummary> page =
-                service.list(
-                        new SnippetFilter(Relation.SHARED, null, null, null),
-                        PageRequest.of(0, 10));
-
-        assertThat(page).isEmpty();
-        verify(repository, never())
-                .findAll(ArgumentMatchers.<Specification<Snippet>>any(), any(Pageable.class));
-    }
-
-    @Test
     void cannotShareWithOwner() {
         when(access.require(ID, Role.OWNER)).thenReturn(existing());
 
         assertThatThrownBy(() -> service.share(ID, OWNER)).isInstanceOf(BadRequestException.class);
         verify(permissions, never()).share(any(), any());
-    }
-
-    @Test
-    void downloadUsesOwnerFormatRules() {
-        Snippet snippet = existing();
-        when(access.require(ID, Role.READER)).thenReturn(snippet);
-        when(contents.read(ID)).thenReturn("x;");
-        when(rules.enabledRules(OWNER, printScript, RuleType.FORMAT)).thenReturn(List.of());
-        when(printScript.format("x;", "1.0", List.of())).thenReturn("x ;");
-
-        assertThat(service.download(ID, true)).isEqualTo(new SnippetFile("My_snippet.ps", "x ;"));
-        assertThat(service.download(ID, false)).isEqualTo(new SnippetFile("My_snippet.ps", "x;"));
     }
 
     @Test
@@ -232,6 +202,36 @@ class SnippetServiceTest {
 
         assertThat(service.format(ID).content()).isEqualTo("x;");
         verify(contents, never()).write(any(), any(), any());
+    }
+
+    @Test
+    void formatStoresFormattedContentAndRelints() {
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
+        when(contents.read(ID)).thenReturn("x;");
+        when(printScript.format(eq("x;"), eq("1.0"), anyList())).thenReturn("x ;");
+
+        assertThat(service.format(ID).content()).isEqualTo("x ;");
+        verify(printScript).lint(eq("x ;"), eq("1.0"), anyList());
+        verify(contents).write(ID, "x ;", "x;");
+    }
+
+    @Test
+    void deleteRemovesRowPermissionsAndContent() {
+        service.delete(ID);
+
+        verify(access).require(ID, Role.OWNER);
+        verify(repository).deleteById(ID);
+        verify(permissions).removeSnippet(ID);
+        verify(contents).deleteAfterCommit(ID);
+    }
+
+    @Test
+    void sharesWithAnotherUser() {
+        when(access.require(ID, Role.OWNER)).thenReturn(existing());
+
+        service.share(ID, "auth0|bob");
+
+        verify(permissions).share(ID, "auth0|bob");
     }
 
     private static Snippet existing() {

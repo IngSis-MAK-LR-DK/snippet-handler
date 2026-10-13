@@ -1,7 +1,9 @@
-package edu.austral.ingsis.snippethandler.language;
+package edu.austral.ingsis.snippethandler.languagecatalog;
 
 import java.util.Comparator;
 import java.util.List;
+
+import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

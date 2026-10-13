@@ -12,13 +12,29 @@ final class AdapterMessages {
 
     record ValidateRequest(String content, String version) {}
 
-    record LintRequest(String content, String version, List<RuleConfig> rules) {}
+    record LintRequest(String content, String version, List<RuleConfig> rules) {
+        LintRequest {
+            rules = List.copyOf(rules);
+        }
+    }
 
-    record LintResponse(List<Violation> violations) {}
+    record LintResponse(List<Violation> violations) {
+        LintResponse {
+            violations = violations == null ? List.of() : List.copyOf(violations);
+        }
+    }
 
-    record FormatRequest(String content, String version, List<RuleConfig> rules) {}
+    record FormatRequest(String content, String version, List<RuleConfig> rules) {
+        FormatRequest {
+            rules = List.copyOf(rules);
+        }
+    }
 
     record FormatResponse(String content) {}
 
-    record ExecuteRequest(String content, String version, List<String> inputs) {}
+    record ExecuteRequest(String content, String version, List<String> inputs) {
+        ExecuteRequest {
+            inputs = List.copyOf(inputs);
+        }
+    }
 }

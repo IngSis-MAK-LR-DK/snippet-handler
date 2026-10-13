@@ -1,6 +1,8 @@
-package edu.austral.ingsis.snippethandler.language;
+package edu.austral.ingsis.snippethandler.languagecatalog;
 
 import java.util.List;
+
+import edu.austral.ingsis.snippethandler.language.LanguageService;
 
 public record LanguageInfo(String name, List<String> versions, String fileExtension) {
 

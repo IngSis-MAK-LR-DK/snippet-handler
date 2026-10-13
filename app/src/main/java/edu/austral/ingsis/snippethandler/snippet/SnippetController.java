@@ -36,9 +36,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class SnippetController {
 
     private final SnippetService snippets;
+    private final SnippetQueries queries;
 
-    public SnippetController(SnippetService snippets) {
+    public SnippetController(SnippetService snippets, SnippetQueries queries) {
         this.snippets = snippets;
+        this.queries = queries;
     }
 
     /** US 3: snippet written in the editor. */
@@ -91,12 +93,12 @@ public class SnippetController {
             @RequestParam(required = false) String language,
             @RequestParam(required = false) Compliance compliance,
             @PageableDefault(sort = "name") Pageable pageable) {
-        return snippets.list(new SnippetFilter(relation, name, language, compliance), pageable);
+        return queries.list(new SnippetFilter(relation, name, language, compliance), pageable);
     }
 
     @GetMapping("/{id}")
     public SnippetDetail get(@PathVariable UUID id) {
-        return snippets.get(id);
+        return queries.get(id);
     }
 
     @DeleteMapping("/{id}")
@@ -116,7 +118,7 @@ public class SnippetController {
     @GetMapping("/{id}/download")
     public ResponseEntity<String> download(
             @PathVariable UUID id, @RequestParam(defaultValue = "false") boolean formatted) {
-        SnippetFile file = snippets.download(id, formatted);
+        SnippetFile file = queries.download(id, formatted);
         return ResponseEntity.ok()
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
