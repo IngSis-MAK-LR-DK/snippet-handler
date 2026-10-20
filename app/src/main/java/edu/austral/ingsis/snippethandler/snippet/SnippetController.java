@@ -58,10 +58,17 @@ public class SnippetController {
             @RequestParam @NotBlank String name,
             @RequestParam(required = false) String description,
             @RequestParam @NotBlank String language,
-            @RequestParam @NotBlank String version) {
+            @RequestParam(required = false) String version) {
         SnippetRequest request =
                 new SnippetRequest(name, description, language, version, read(file));
         return created(snippets.create(jwt.getSubject(), request));
+    }
+
+    /** Formats the editor's content with the caller's rules, without storing anything. */
+    @PostMapping(value = "/format", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public FormattedContent formatPreview(
+            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody FormatPreviewRequest request) {
+        return new FormattedContent(snippets.formatPreview(jwt.getSubject(), request));
     }
 
     /** US 4: changes made in the editor. */

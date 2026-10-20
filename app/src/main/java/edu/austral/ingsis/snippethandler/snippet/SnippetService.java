@@ -6,10 +6,11 @@ import java.util.UUID;
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
 import edu.austral.ingsis.snippethandler.error.InvalidSnippetException;
 import edu.austral.ingsis.snippethandler.events.SnippetEventPublisher;
-import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.SnippetValidator;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
+import edu.austral.ingsis.snippethandler.languagecatalog.LanguageResolver;
+import edu.austral.ingsis.snippethandler.languagecatalog.LanguageSelection;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Role;
 
@@ -27,7 +28,7 @@ public class SnippetService {
     private final SnippetAccess access;
     private final SnippetContents contents;
     private final SnippetStyle style;
-    private final LanguageRegistry languages;
+    private final LanguageResolver languages;
     private final PermissionService permissions;
     private final SnippetEventPublisher events;
 
@@ -36,7 +37,7 @@ public class SnippetService {
             SnippetAccess access,
             SnippetContents contents,
             SnippetStyle style,
-            LanguageRegistry languages,
+            LanguageResolver languages,
             PermissionService permissions,
             SnippetEventPublisher events) {
         this.store = store;
@@ -48,19 +49,24 @@ public class SnippetService {
         this.events = events;
     }
 
-    /** US 1 and 3: only snippets valid for their language are accepted. */
+    /**
+     * US 1 and 3: only snippets valid for their language are accepted. Without a version, the
+     * latest one of the language is used.
+     */
     public SnippetDetail create(String userId, SnippetRequest request) {
-        LanguageService language = languages.get(request.language(), request.version());
+        LanguageSelection selection = languages.select(request.language(), request.version());
+        LanguageService language = selection.language();
+        String version = selection.version();
         String content = request.content();
-        requireValid(language, content, request.version());
+        requireValid(language, content, version);
         Snippet snippet =
                 new Snippet(
                         request.name(),
                         request.description(),
                         language.language(),
-                        request.version(),
+                        version,
                         userId);
-        snippet.linted(style.lint(userId, language, request.version(), content));
+        snippet.linted(style.lint(userId, language, version, content));
 
         Snippet saved =
                 store.save(snippet, content, null, s -> permissions.registerOwner(s.getId()));
@@ -75,9 +81,12 @@ public class SnippetService {
         String version =
                 Objects.requireNonNullElse(request.version(), snippet.getLanguageVersion());
         LanguageService language =
-                languages.get(
-                        Objects.requireNonNullElse(request.language(), snippet.getLanguage()),
-                        version);
+                languages
+                        .select(
+                                Objects.requireNonNullElse(
+                                        request.language(), snippet.getLanguage()),
+                                version)
+                        .language();
         boolean sourceChanged =
                 !content.equals(current)
                         || !language.language().equals(snippet.getLanguage())
@@ -123,7 +132,7 @@ public class SnippetService {
     /** Applies the owner's format rules and stores the result. */
     public SnippetDetail format(UUID id) {
         Snippet snippet = access.require(id, Role.OWNER);
-        LanguageService language = languages.get(snippet.getLanguage());
+        LanguageService language = languages.language(snippet.getLanguage());
         String version = snippet.getLanguageVersion();
         String current = contents.read(id);
         String formatted = style.format(snippet.getOwnerId(), language, version, current);
@@ -132,6 +141,16 @@ public class SnippetService {
         }
         snippet.linted(style.lint(snippet.getOwnerId(), language, version, formatted));
         return SnippetDetail.of(store.save(snippet, formatted, current, s -> {}), formatted);
+    }
+
+    /**
+     * Formats the editor's content with the caller's format rules; nothing is stored. Invalid
+     * content is rejected like on create, with the broken rule and its position.
+     */
+    public String formatPreview(String userId, FormatPreviewRequest request) {
+        LanguageSelection selection = languages.select(request.language(), request.version());
+        requireValid(selection.language(), request.content(), selection.version());
+        return style.format(userId, selection.language(), selection.version(), request.content());
     }
 
     private static void requireValid(SnippetValidator validator, String content, String version) {

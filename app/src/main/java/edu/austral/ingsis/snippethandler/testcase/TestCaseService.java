@@ -75,6 +75,20 @@ public class TestCaseService {
         return run(snippet, contents.read(snippetId), find(snippetId, testId));
     }
 
+    /**
+     * Runs a test that is not stored (the one being edited in the test panel). Nothing is saved;
+     * the result has no test id.
+     */
+    public TestRunResult runUnsaved(UUID snippetId, TestRunRequest request) {
+        Snippet snippet = access.require(snippetId, Role.READER);
+        return evaluate(
+                null,
+                snippet,
+                contents.read(snippetId),
+                request.inputs(),
+                request.expectedOutputs());
+    }
+
     /** Runs every test of a snippet, recording each outcome. Internal: no permission check. */
     public List<TestRunResult> runAll(UUID snippetId) {
         Snippet snippet = access.find(snippetId);
@@ -85,24 +99,42 @@ public class TestCaseService {
     }
 
     private TestRunResult run(Snippet snippet, String content, TestCase test) {
+        TestRunResult result =
+                evaluate(
+                        test.getId(),
+                        snippet,
+                        content,
+                        test.getInputs(),
+                        test.getExpectedOutputs());
+        test.ran(result.status());
+        repository.save(test);
+        return result;
+    }
+
+    /**
+     * Executes the snippet with {@code inputs} and compares what it printed with {@code expected}.
+     */
+    private TestRunResult evaluate(
+            UUID testId,
+            Snippet snippet,
+            String content,
+            List<String> inputs,
+            List<String> expected) {
         ExecutionResult result;
         TestStatus status;
         try {
             SnippetRunner runner = languages.get(snippet.getLanguage());
-            result = runner.execute(content, snippet.getLanguageVersion(), test.getInputs());
+            result = runner.execute(content, snippet.getLanguageVersion(), inputs);
             status =
-                    result.successful() && result.outputs().equals(test.getExpectedOutputs())
+                    result.successful() && result.outputs().equals(expected)
                             ? TestStatus.PASSED
                             : TestStatus.FAILED;
         } catch (LanguageServiceException e) {
-            LOG.warn("Could not run test {} of snippet {}", test.getId(), snippet.getId(), e);
+            LOG.warn("Could not run a test of snippet {}", snippet.getId(), e);
             result = new ExecutionResult(List.of(), List.of(e.getMessage()));
             status = TestStatus.ERROR;
         }
-        test.ran(status);
-        repository.save(test);
-        return new TestRunResult(
-                test.getId(), status, result.outputs(), test.getExpectedOutputs(), result.errors());
+        return new TestRunResult(testId, status, result.outputs(), expected, result.errors());
     }
 
     private TestCase find(UUID snippetId, UUID testId) {

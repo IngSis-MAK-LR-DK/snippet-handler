@@ -17,6 +17,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -519,6 +520,69 @@ class SnippetApiIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM test_case", Integer.class)).isZero();
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createsSnippetWithLatestVersionWhenMissing() throws Exception {
+        mvc.perform(
+                        as(
+                                postJson(
+                                        "/snippets",
+                                        """
+                                        {"name": "No version", "language": "printscript",
+                                         "content": "println(1);"}
+                                        """)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value("1.1"));
+    }
+
+    @Test
+    void formatsEditorContentWithoutStoringIt() throws Exception {
+        mvc.perform(as(postJson("/snippets/format", "{\"content\": \"let x=1;\"}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").value("formatted;\n"));
+        SERVICES.verify(
+                postRequestedFor(urlEqualTo("/format"))
+                        .withRequestBody(
+                                equalToJson(
+                                        "{\"content\": \"let x=1;\", \"version\": \"1.1\"}",
+                                        true,
+                                        true)));
+        assertThat(assets.size()).isZero();
+
+        mvc.perform(as(postJson("/snippets/format", "{\"content\": \"INVALID\"}")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].rule").value("missing-semicolon"));
+    }
+
+    @Test
+    void runsTestFromThePanelWithoutStoringIt() throws Exception {
+        String id = createSnippet("Hello", VALID_SOURCE);
+
+        mvc.perform(
+                        as(
+                                postJson(
+                                        "/snippets/" + id + "/tests/run",
+                                        "{\"inputs\": [], \"expectedOutputs\": [\"hi\"]}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PASSED"))
+                .andExpect(jsonPath("$.testId").value(nullValue()));
+        mvc.perform(
+                        as(
+                                postJson(
+                                        "/snippets/" + id + "/tests/run",
+                                        "{\"inputs\": [], \"expectedOutputs\": [\"bye\"]}")))
+                .andExpect(jsonPath("$.status").value("FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM test_case", Integer.class)).isZero();
+
+        SERVICES.stubFor(
+                get(urlEqualTo("/permissions/" + id)).willReturn(okJson("{\"role\": \"NONE\"}")));
+        mvc.perform(
+                        as(
+                                postJson(
+                                        "/snippets/" + id + "/tests/run",
+                                        "{\"inputs\": [], \"expectedOutputs\": []}")))
+                .andExpect(status().isForbidden());
     }
 
     private String createSnippet(String name, String content) throws Exception {

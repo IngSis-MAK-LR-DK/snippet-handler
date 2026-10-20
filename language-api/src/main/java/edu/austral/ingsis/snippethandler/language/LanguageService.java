@@ -20,4 +20,11 @@ public interface LanguageService
 
     /** File extension (without dot) used when downloading snippets of this language. */
     String fileExtension();
+
+    /** Most recent of {@link #versions()}, according to {@link Versions#ORDER}. */
+    default String latestVersion() {
+        return versions().stream()
+                .max(Versions.ORDER)
+                .orElseThrow(() -> new UnsupportedLanguageException(language(), null));
+    }
 }

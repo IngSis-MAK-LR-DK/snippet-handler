@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -14,6 +16,7 @@ import edu.austral.ingsis.snippethandler.language.ExecutionResult;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
+import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
 import edu.austral.ingsis.snippethandler.snippet.SnippetAccess;
 import edu.austral.ingsis.snippethandler.snippet.SnippetContents;
@@ -79,6 +82,24 @@ class TestCaseServiceTest {
                 .thenReturn(new ExecutionResult(List.of(), List.of("division by zero")));
 
         assertThat(service.runAll(SNIPPET).get(0).status()).isEqualTo(TestStatus.FAILED);
+    }
+
+    @Test
+    void runsUnsavedTestWithoutStoringIt() {
+        when(access.require(SNIPPET, Role.READER))
+                .thenReturn(new Snippet("s", null, "printscript", "1.0", "auth0|alice"));
+        when(printScript.execute(anyString(), anyString(), anyList()))
+                .thenReturn(new ExecutionResult(List.of("a"), List.of()));
+
+        TestRunResult passed =
+                service.runUnsaved(SNIPPET, new TestRunRequest(List.of("a"), List.of("a")));
+        TestRunResult failed =
+                service.runUnsaved(SNIPPET, new TestRunRequest(List.of("a"), List.of("b")));
+
+        assertThat(passed.status()).isEqualTo(TestStatus.PASSED);
+        assertThat(passed.testId()).isNull();
+        assertThat(failed.status()).isEqualTo(TestStatus.FAILED);
+        verify(repository, never()).save(any());
     }
 
     private static TestCase test(List<String> inputs, List<String> outputs) {

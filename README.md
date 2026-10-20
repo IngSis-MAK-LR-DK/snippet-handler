@@ -29,8 +29,8 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 
 | Endpoint | User story |
 |---|---|
-| `POST /snippets` (multipart `file` + `name`, `description`, `language`, `version`) | 1 |
-| `POST /snippets` (JSON con `content`) | 3 |
+| `POST /snippets` (multipart `file` + `name`, `description`, `language`, `version` opcional) | 1 |
+| `POST /snippets` (JSON con `content`; sin `version` se usa la última del lenguaje) | 3 |
 | `PUT /snippets/{id}` (multipart o JSON, todos los campos opcionales) | 2, 4 |
 | `GET /snippets?relation=OWNER\|SHARED\|ALL&name=&language=&compliance=&sort=name,asc&page=&size=` | 5 |
 | `GET /snippets/{id}` | 6 |
@@ -38,14 +38,18 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 | `POST /snippets/{id}/share` `{"userId": "..."}` | 7 |
 | `GET\|POST /snippets/{id}/tests`, `PUT\|DELETE /snippets/{id}/tests/{testId}` | 8 |
 | `POST /snippets/{id}/tests/{testId}/run` | 6, 9 |
+| `POST /snippets/{id}/tests/run` `{inputs, expectedOutputs}`: corre un test sin guardarlo | 9 |
 | `GET\|PUT /rules/format`, `GET\|PUT /rules/lint` (`?language=` opcional) | 11, 14 |
-| `POST /snippets/{id}/format` | 11 |
+| `POST /snippets/{id}/format`: formatea y guarda | 11 |
+| `POST /snippets/format` `{content, language?, version?}`: formatea sin guardar | 11 |
 | `GET /snippets/{id}/download?formatted=true\|false` | 13 |
 | `GET /languages` | |
 
 Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming),
 10, 12 y 15 quedan para cuando se vean en la cursada; `SnippetEventPublisher` es el punto de
 extensión para pasarlas a una cola.
+
+Cómo usa la UI cada endpoint: [docs/ui-integration.md](docs/ui-integration.md).
 
 ## Desarrollo
 

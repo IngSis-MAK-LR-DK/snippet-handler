@@ -16,15 +16,18 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import edu.austral.ingsis.snippethandler.config.SnippetProperties;
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
 import edu.austral.ingsis.snippethandler.error.InvalidSnippetException;
 import edu.austral.ingsis.snippethandler.events.SnippetEventPublisher;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
+import edu.austral.ingsis.snippethandler.language.RuleType;
 import edu.austral.ingsis.snippethandler.language.SyntaxError;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.language.Violation;
+import edu.austral.ingsis.snippethandler.languagecatalog.LanguageResolver;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Role;
 import edu.austral.ingsis.snippethandler.rules.RuleService;
@@ -53,6 +56,7 @@ class SnippetServiceTest {
     void setUp() {
         when(printScript.language()).thenReturn("printscript");
         when(printScript.versions()).thenReturn(Set.of("1.0", "1.1"));
+        when(printScript.latestVersion()).thenReturn("1.1");
         when(printScript.fileExtension()).thenReturn("ps");
         when(printScript.validate(anyString(), anyString())).thenReturn(ValidationResult.ok());
         when(printScript.lint(anyString(), anyString(), anyList())).thenReturn(List.of());
@@ -71,7 +75,9 @@ class SnippetServiceTest {
                         access,
                         contents,
                         style,
-                        new LanguageRegistry(List.of(printScript)),
+                        new LanguageResolver(
+                                new LanguageRegistry(List.of(printScript)),
+                                new SnippetProperties("printscript", null, null, null, null)),
                         permissions,
                         events);
     }
@@ -86,6 +92,41 @@ class SnippetServiceTest {
         assertThat(detail.compliance()).isEqualTo(Compliance.COMPLIANT);
         verify(contents).write(ID, "x;", null);
         verify(permissions).registerOwner(ID);
+    }
+
+    @Test
+    void createWithoutVersionUsesLatest() {
+        SnippetDetail detail =
+                service.create(OWNER, new SnippetRequest("Hi", null, "printscript", null, "x;"));
+
+        assertThat(detail.version()).isEqualTo("1.1");
+        verify(printScript).validate("x;", "1.1");
+    }
+
+    @Test
+    void formatPreviewUsesCallerRulesAndStoresNothing() {
+        when(printScript.format(eq("x;"), eq("1.1"), anyList())).thenReturn("x ;");
+
+        String formatted =
+                service.formatPreview("auth0|bob", new FormatPreviewRequest("x;", null, null));
+
+        assertThat(formatted).isEqualTo("x ;");
+        verify(rules).enabledRules("auth0|bob", printScript, RuleType.FORMAT);
+        verifyNoInteractions(repository, contents, permissions, events);
+    }
+
+    @Test
+    void formatPreviewRejectsInvalidContent() {
+        when(printScript.validate("bad", "1.0"))
+                .thenReturn(ValidationResult.invalid(List.of(new SyntaxError("r", "m", 1, 1))));
+
+        assertThatThrownBy(
+                        () ->
+                                service.formatPreview(
+                                        OWNER,
+                                        new FormatPreviewRequest("bad", "printscript", "1.0")))
+                .isInstanceOf(InvalidSnippetException.class);
+        verify(printScript, never()).format(anyString(), anyString(), anyList());
     }
 
     @Test

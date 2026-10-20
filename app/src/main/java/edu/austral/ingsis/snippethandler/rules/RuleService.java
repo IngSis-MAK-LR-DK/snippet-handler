@@ -5,13 +5,12 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import edu.austral.ingsis.snippethandler.config.SnippetProperties;
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
-import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.RuleCatalog;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.languagecatalog.LanguageResolver;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionOperations;
@@ -24,19 +23,16 @@ import org.springframework.transaction.support.TransactionOperations;
 public class RuleService {
 
     private final RuleOverrideRepository repository;
-    private final LanguageRegistry languages;
+    private final LanguageResolver languages;
     private final TransactionOperations transaction;
-    private final String defaultLanguage;
 
     public RuleService(
             RuleOverrideRepository repository,
-            LanguageRegistry languages,
-            TransactionOperations transaction,
-            SnippetProperties properties) {
+            LanguageResolver languages,
+            TransactionOperations transaction) {
         this.repository = repository;
         this.languages = languages;
         this.transaction = transaction;
-        this.defaultLanguage = properties.defaultLanguage();
     }
 
     /**
@@ -113,6 +109,6 @@ public class RuleService {
     }
 
     private RuleCatalog resolve(String language) {
-        return languages.get(language == null ? defaultLanguage : language);
+        return languages.language(language);
     }
 }

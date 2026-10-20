@@ -39,6 +39,13 @@ public class TestCaseController {
                 .body(test);
     }
 
+    /** Runs the test being edited in the test panel without storing it. */
+    @PostMapping("/run")
+    public TestRunResult runUnsaved(
+            @PathVariable UUID snippetId, @Valid @RequestBody TestRunRequest request) {
+        return tests.runUnsaved(snippetId, request);
+    }
+
     @PutMapping("/{testId}")
     public TestCaseView update(
             @PathVariable UUID snippetId,

@@ -43,6 +43,18 @@ class LanguageRegistryTest {
     }
 
     @Test
+    void latestVersionUsesVersionOrder() {
+        assertEquals("1.10", new FakeLanguage("x", Set.of("1.9", "1.10", "1.2")).latestVersion());
+    }
+
+    @Test
+    void languageWithoutVersionsHasNoLatest() {
+        assertThrows(
+                UnsupportedLanguageException.class,
+                () -> new FakeLanguage("x", Set.of()).latestVersion());
+    }
+
+    @Test
     void listsAllLanguages() {
         assertEquals(List.of(printScript), registry.all());
     }

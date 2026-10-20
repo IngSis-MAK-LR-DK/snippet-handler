@@ -17,6 +17,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.languagecatalog.LanguageResolver;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,9 +43,10 @@ class RuleServiceTest {
         service =
                 new RuleService(
                         repository,
-                        new LanguageRegistry(List.of(printScript)),
-                        TransactionOperations.withoutTransaction(),
-                        new SnippetProperties("printscript", null, null, null, null));
+                        new LanguageResolver(
+                                new LanguageRegistry(List.of(printScript)),
+                                new SnippetProperties("printscript", null, null, null, null)),
+                        TransactionOperations.withoutTransaction());
     }
 
     @Test
