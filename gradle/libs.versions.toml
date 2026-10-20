@@ -1,0 +1,11 @@
+[versions]
+spring-boot = "3.5.16"
+wiremock = "3.13.2"
+
+[libraries]
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+
+[plugins]
+cikit-java = { id = "edu.austral.ingsis.java-conventions", version = "1.0.0" }
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

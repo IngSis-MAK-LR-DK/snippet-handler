@@ -1,0 +1,69 @@
+# Entorno local: Postgres + bucket (asset service de la catedra sobre Azurite) + este servicio.
+# Permisos y el adaptador de PrintScript corren aparte; se los alcanza por host.docker.internal.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: snippets
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME:-snippets}
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-snippets}
+    ports:
+      - "5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SPRING_DATASOURCE_USERNAME:-snippets}"]
+      interval: 5s
+      retries: 10
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    volumes:
+      - blob-data:/data
+
+  asset-service:
+    image: ghcr.io/austral-ingsis/snippet-asset-service:latest
+    environment:
+      AZURE_HOST: http://azurite
+      NEW_RELIC_AGENT_ENABLED: "false"
+    ports:
+      - "8082:8080"
+    depends_on:
+      - azurite
+
+  snippet-handler:
+    build:
+      context: .
+      secrets:
+        - gpr_user
+        - gpr_key
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/snippets
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-snippets}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-snippets}
+      ASSET_SERVICE_URL: http://asset-service:8080
+      ASSET_CONTAINER: ${ASSET_CONTAINER:-snippets}
+      PERMISSION_SERVICE_URL: ${PERMISSION_SERVICE_URL:-http://host.docker.internal:8081}
+      PRINTSCRIPT_SERVICE_URL: ${PRINTSCRIPT_SERVICE_URL:-http://host.docker.internal:8083}
+      AUTH0_ISSUER_URI: ${AUTH0_ISSUER_URI}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      asset-service:
+        condition: service_started
+
+secrets:
+  gpr_user:
+    environment: GITHUB_ACTOR
+  gpr_key:
+    environment: GITHUB_TOKEN
+
+volumes:
+  db-data:
+  blob-data:

@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: snippet-handler-service
+  # Se pisan con SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD.
+  datasource:
+    url: jdbc:postgresql://localhost:5433/snippets
+    username: snippets
+    password: snippets
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 2MB
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Auth0: https://<tenant>.auth0.com/ (con la barra final)
+          issuer-uri: ${AUTH0_ISSUER_URI}
+          audiences: ${AUTH0_AUDIENCE}
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+snippet:
+  default-language: printscript
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  asset:
+    url: ${ASSET_SERVICE_URL:http://localhost:8082}
+    container: ${ASSET_CONTAINER:snippets}
+  permission:
+    url: ${PERMISSION_SERVICE_URL:http://localhost:8081}
+  languages:
+    printscript:
+      url: ${PRINTSCRIPT_SERVICE_URL:http://localhost:8083}
+      versions: ["1.0", "1.1"]
+      file-extension: ps
