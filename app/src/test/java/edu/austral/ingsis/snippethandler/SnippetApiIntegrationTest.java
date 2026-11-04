@@ -89,6 +89,9 @@ class SnippetApiIntegrationTest {
                 "spring.security.oauth2.resourceserver.jwt.audiences", () -> "snippet-searcher");
         registry.add("snippet.permission.url", SERVICES::baseUrl);
         registry.add("snippet.languages.printscript.url", SERVICES::baseUrl);
+        registry.add("snippet.service-token.auth0-domain", SERVICES::baseUrl);
+        registry.add("snippet.service-token.client-id", () -> "handler");
+        registry.add("snippet.service-token.client-secret", () -> "secret");
     }
 
     @TestConfiguration
@@ -162,6 +165,11 @@ class SnippetApiIntegrationTest {
         SERVICES.stubFor(post("/format").willReturn(okJson("{\"content\": \"formatted;\\n\"}")));
         SERVICES.stubFor(
                 post("/execute").willReturn(okJson("{\"outputs\": [\"hi\"], \"errors\": []}")));
+        SERVICES.stubFor(
+                post("/oauth/token")
+                        .willReturn(
+                                okJson(
+                                        "{\"access_token\": \"service-token\", \"expires_in\": 86400}")));
     }
 
     @Test
@@ -208,6 +216,10 @@ class SnippetApiIntegrationTest {
                 postRequestedFor(urlEqualTo("/permissions"))
                         .withHeader("Authorization", equalTo("Bearer token"))
                         .withRequestBody(equalToJson("{\"snippetId\": \"" + id + "\"}")));
+        // The language adapter also requires the user's token.
+        SERVICES.verify(
+                postRequestedFor(urlEqualTo("/validate"))
+                        .withHeader("Authorization", equalTo("Bearer token")));
     }
 
     @Test
@@ -308,6 +320,10 @@ class SnippetApiIntegrationTest {
                                                         .orElseThrow()
                                                         .getLastStatus())
                                         .isEqualTo(TestStatus.PASSED));
+        // US 16 runs in the background, with no user: the handler uses its own token.
+        SERVICES.verify(
+                postRequestedFor(urlEqualTo("/execute"))
+                        .withHeader("Authorization", equalTo("Bearer service-token")));
     }
 
     @Test

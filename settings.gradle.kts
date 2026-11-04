@@ -15,4 +15,4 @@ pluginManagement {
 
 rootProject.name = "snippet-handler-service"
 
-include("language-api", "language-http", "asset-client", "permission-client", "app")
+include("language-api", "language-http", "asset-client", "permission-client", "auth0-management-client", "app")

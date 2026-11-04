@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":language-http"))
     implementation(project(":asset-client"))
     implementation(project(":permission-client"))
+    implementation(project(":auth0-management-client"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")

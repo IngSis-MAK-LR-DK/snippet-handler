@@ -53,6 +53,13 @@ public class TestCaseController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Runs a draft test without saving it. */
+    @PostMapping("/preview")
+    public TestRunResult preview(
+            @PathVariable UUID snippetId, @Valid @RequestBody TestCaseRequest request) {
+        return tests.preview(snippetId, request);
+    }
+
     @PostMapping("/{testId}/run")
     public TestRunResult run(@PathVariable UUID snippetId, @PathVariable UUID testId) {
         return tests.run(snippetId, testId);

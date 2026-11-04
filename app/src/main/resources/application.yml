@@ -40,6 +40,17 @@ snippet:
     container: ${ASSET_CONTAINER:snippets}
   permission:
     url: ${PERMISSION_SERVICE_URL:http://localhost:8081}
+  users:
+    auth0-domain: ${AUTH0_MANAGEMENT_DOMAIN:}
+    client-id: ${AUTH0_MANAGEMENT_CLIENT_ID:}
+    client-secret: ${AUTH0_MANAGEMENT_CLIENT_SECRET:}
+  # Token propio para las llamadas a los adaptadores sin usuario (tests de US 16, revalidacion).
+  # Client M2M de Auth0 autorizado para la misma API que valida el resto de los servicios.
+  service-token:
+    auth0-domain: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}
+    client-id: ${AUTH0_SERVICE_CLIENT_ID:}
+    client-secret: ${AUTH0_SERVICE_CLIENT_SECRET:}
+    audience: ${spring.security.oauth2.resourceserver.jwt.audiences}
   languages:
     printscript:
       url: ${PRINTSCRIPT_SERVICE_URL:http://localhost:8083}

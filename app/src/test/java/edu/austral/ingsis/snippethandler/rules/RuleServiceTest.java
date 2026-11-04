@@ -44,7 +44,7 @@ class RuleServiceTest {
                         repository,
                         new LanguageRegistry(List.of(printScript)),
                         TransactionOperations.withoutTransaction(),
-                        new SnippetProperties("printscript", null, null, null, null));
+                        new SnippetProperties("printscript", null, null, null, null, null, null));
     }
 
     @Test
