@@ -48,3 +48,8 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     classDirectories.setFrom(coveredClasses)
 }
+
+// bootRun corre desde la raiz del repo, donde esta el .env que lee spring.config.import.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir = rootProject.projectDir
+}

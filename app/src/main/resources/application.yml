@@ -1,4 +1,8 @@
 spring:
+  config:
+    # Carga AUTH0_* (y el resto) desde el .env de la raiz del repo, si existe (ver .env.example).
+    # Las variables de entorno con el mismo nombre ganan sobre el archivo.
+    import: optional:file:.env[.properties]
   application:
     name: snippet-handler-service
   # Se pisan con SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD.
@@ -18,8 +22,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # Auth0: https://<tenant>.auth0.com/ (con la barra final)
-          issuer-uri: ${AUTH0_ISSUER_URI}
+          # El "iss" de Auth0 es "https://<tenant>/" (con esquema y barra final). Spring lo compara
+          # como string exacto, asi que el formato tiene que coincidir.
+          issuer-uri: https://${AUTH0_DOMAIN}/
+          # Rechaza los tokens que no fueron emitidos para esta API (claim "aud").
           audiences: ${AUTH0_AUDIENCE}
 
 server:
@@ -40,8 +46,9 @@ snippet:
     container: ${ASSET_CONTAINER:snippets}
   permission:
     url: ${PERMISSION_SERVICE_URL:http://localhost:8081}
+  # Auth0 Management API del mismo tenant (busqueda de usuarios para compartir, US 7).
   users:
-    auth0-domain: ${AUTH0_MANAGEMENT_DOMAIN:}
+    auth0-domain: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}
     client-id: ${AUTH0_MANAGEMENT_CLIENT_ID:}
     client-secret: ${AUTH0_MANAGEMENT_CLIENT_SECRET:}
   # Token propio para las llamadas a los adaptadores sin usuario (tests de US 16, revalidacion).

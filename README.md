@@ -87,10 +87,17 @@ curl localhost:8080/actuator/health
 | Adaptador PrintScript | 8083 |
 | Postgres del handler | 5433 |
 
-Búsqueda de usuarios: `AUTH0_MANAGEMENT_DOMAIN`, `AUTH0_MANAGEMENT_CLIENT_ID` y `AUTH0_MANAGEMENT_CLIENT_SECRET` (client M2M con scope `read:users`). Sin ellas, `GET /users` responde 502.
+Auth0: `AUTH0_DOMAIN` (dominio del tenant, sin `https://`) y `AUTH0_AUDIENCE` (Identifier de la API), igual que en el [template de la cátedra](https://github.com/austral-ingsis/auth0-integration). El servicio valida firma, `exp`, `iss` y `aud` desde `application.yml`. Con `./gradlew bootRun` también lee el `.env` de la raíz.
 
-Llamadas a los adaptadores de lenguaje: el handler reenvía el token del usuario. El trabajo en segundo plano (tests que corren al editar un snippet y revalidación) no tiene usuario, así que usa un token propio: `AUTH0_SERVICE_CLIENT_ID` y `AUTH0_SERVICE_CLIENT_SECRET` (client M2M de Auth0 autorizado para la API de `AUTH0_AUDIENCE`). Sin ellas, esas llamadas salen sin token y el adaptador responde 401.
+El handler usa dos applications M2M del tenant, cada una con un solo permiso:
+
+| Application | Variables | Autorizada para | Para qué |
+|---|---|---|---|
+| `snippet-handler-service` | `AUTH0_SERVICE_CLIENT_ID` / `_SECRET` | API `snippet-searcher` | Token propio para el trabajo en segundo plano, que no tiene usuario (tests que corren al editar un snippet, revalidación). Sin ellas, esas llamadas al adaptador salen sin token y responden 401 |
+| `snippet-handler-management` | `AUTH0_MANAGEMENT_CLIENT_ID` / `_SECRET` | Auth0 Management API, solo `read:users` | Búsqueda de usuarios para compartir. Sin ellas, `GET /users` responde 502 |
+
+En las requests de un usuario, el handler reenvía el token de ese usuario a Permisos y a los adaptadores.
 
 Una versión nueva de PrintScript se agrega en `snippet.languages.printscript.versions` (y el adaptador tiene que soportarla); después se revalida con el endpoint de arriba.
 
-Permisos y el adaptador corren desde sus propios repos; las URLs se cambian en `.env`.
+Permisos y el adaptador corren desde sus propios repos. En Docker el handler los alcanza por `host.docker.internal` (fijo en `docker-compose.yml`); las URLs del `.env` son las de tu máquina y solo se usan con `./gradlew bootRun`.
