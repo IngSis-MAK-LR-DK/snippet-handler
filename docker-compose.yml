@@ -66,9 +66,9 @@ services:
 
 secrets:
   gpr_user:
-    environment: GITHUB_ACTOR
+    environment: GPR_USER
   gpr_key:
-    environment: GITHUB_TOKEN
+    environment: GPR_KEY
 
 volumes:
   db-data:
