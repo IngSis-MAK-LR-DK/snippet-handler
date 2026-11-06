@@ -74,8 +74,8 @@ Las reglas (Spotless, Checkstyle, JUnit, JaCoCo ≥ 80% por módulo) y el CI vie
 ### Levantar local
 
 ```bash
-cp .env.example .env      # completar Auth0
-GITHUB_ACTOR=<usuario> GITHUB_TOKEN=<pat> docker compose up --build
+cp .env.example .env      # completar Auth0, GPR_USER y GPR_KEY
+docker compose up --build
 curl localhost:8080/actuator/health
 ```
 
