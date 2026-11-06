@@ -12,6 +12,8 @@ public record SnippetProperties(
         Cors cors,
         Asset asset,
         Permission permission,
+        Users users,
+        ServiceToken serviceToken,
         Map<String, Language> languages) {
 
     public SnippetProperties {
@@ -27,6 +29,28 @@ public record SnippetProperties(
     public record Asset(String url, String container) {}
 
     public record Permission(String url) {}
+
+    /** Auth0 Management API, used to search the users a snippet can be shared with. */
+    public record Users(String auth0Domain, String clientId, String clientSecret) {
+        public Users {
+            auth0Domain = auth0Domain == null ? "" : auth0Domain.replaceAll("/+$", "");
+        }
+    }
+
+    /**
+     * Machine to machine client the handler uses towards the language adapters when there is no
+     * user token to forward (background work). Without a client id, those requests go without one.
+     */
+    public record ServiceToken(
+            String auth0Domain, String clientId, String clientSecret, String audience) {
+        public ServiceToken {
+            auth0Domain = auth0Domain == null ? "" : auth0Domain.replaceAll("/+$", "");
+        }
+
+        public boolean configured() {
+            return clientId != null && !clientId.isBlank();
+        }
+    }
 
     public record Language(String url, List<String> versions, String fileExtension) {
         public Language {

@@ -42,6 +42,11 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 | `POST /snippets/{id}/format` | 11 |
 | `GET /snippets/{id}/download?formatted=true\|false` | 13 |
 | `GET /languages` | |
+| `POST /snippets/format` `{language, version, content}` (formatea sin guardar) | 3, 4 |
+| `POST /snippets/{id}/tests/preview` (corre un test sin guardarlo) | 8, 9 |
+| `GET /users?query=&page=&size=` (busca en Auth0, excluye al caller) | 7 |
+| `POST /languages/{lang}/versions/{version}/revalidate` (202, en background) | 5 |
+| `GET /languages/revalidations/{id}` (progreso de la revalidación) | 5 |
 
 Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming),
 10, 12 y 15 quedan para cuando se vean en la cursada; `SnippetEventPublisher` es el punto de
@@ -82,4 +87,17 @@ curl localhost:8080/actuator/health
 | Adaptador PrintScript | 8083 |
 | Postgres del handler | 5433 |
 
-Permisos y el adaptador corren desde sus propios repos; las URLs se cambian en `.env`.
+Auth0: `AUTH0_DOMAIN` (dominio del tenant, sin `https://`) y `AUTH0_AUDIENCE` (Identifier de la API), igual que en el [template de la cátedra](https://github.com/austral-ingsis/auth0-integration). El servicio valida firma, `exp`, `iss` y `aud` desde `application.yml`. Con `./gradlew bootRun` también lee el `.env` de la raíz.
+
+El handler usa dos applications M2M del tenant, cada una con un solo permiso:
+
+| Application | Variables | Autorizada para | Para qué |
+|---|---|---|---|
+| `snippet-handler-service` | `AUTH0_SERVICE_CLIENT_ID` / `_SECRET` | API `snippet-searcher` | Token propio para el trabajo en segundo plano, que no tiene usuario (tests que corren al editar un snippet, revalidación). Sin ellas, esas llamadas al adaptador salen sin token y responden 401 |
+| `snippet-handler-management` | `AUTH0_MANAGEMENT_CLIENT_ID` / `_SECRET` | Auth0 Management API, solo `read:users` | Búsqueda de usuarios para compartir. Sin ellas, `GET /users` responde 502 |
+
+En las requests de un usuario, el handler reenvía el token de ese usuario a Permisos y a los adaptadores.
+
+Una versión nueva de PrintScript se agrega en `snippet.languages.printscript.versions` (y el adaptador tiene que soportarla); después se revalida con el endpoint de arriba.
+
+Permisos y el adaptador corren desde sus propios repos. En Docker el handler los alcanza por `host.docker.internal` (fijo en `docker-compose.yml`); las URLs del `.env` son las de tu máquina y solo se usan con `./gradlew bootRun`.

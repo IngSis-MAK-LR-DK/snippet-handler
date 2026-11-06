@@ -130,6 +130,18 @@ public class SnippetController {
                 .body(file.content());
     }
 
+    /** Formats source the editor has not saved yet, with the rules of the caller. */
+    @PostMapping("/format")
+    public FormatPreviewResponse previewFormat(
+            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody FormatPreviewRequest request) {
+        return new FormatPreviewResponse(
+                snippets.previewFormat(
+                        jwt.getSubject(),
+                        request.language(),
+                        request.version(),
+                        request.content()));
+    }
+
     @PostMapping("/{id}/format")
     public SnippetDetail format(@PathVariable UUID id) {
         return snippets.format(id);

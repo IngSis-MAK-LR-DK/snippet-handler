@@ -84,25 +84,52 @@ public class TestCaseService {
                 .toList();
     }
 
+    /** Runs a test that is not saved yet (the editor's draft). Nothing is stored. */
+    public TestRunResult preview(UUID snippetId, TestCaseRequest request) {
+        Snippet snippet = access.require(snippetId, Role.READER);
+        return evaluate(
+                snippet,
+                contents.read(snippetId),
+                null,
+                request.inputs(),
+                request.expectedOutputs());
+    }
+
     private TestRunResult run(Snippet snippet, String content, TestCase test) {
+        TestRunResult result =
+                evaluate(
+                        snippet,
+                        content,
+                        test.getId(),
+                        test.getInputs(),
+                        test.getExpectedOutputs());
+        test.ran(result.status());
+        repository.save(test);
+        return result;
+    }
+
+    private TestRunResult evaluate(
+            Snippet snippet,
+            String content,
+            UUID testId,
+            List<String> inputs,
+            List<String> expectedOutputs) {
         ExecutionResult result;
         TestStatus status;
         try {
             SnippetRunner runner = languages.get(snippet.getLanguage());
-            result = runner.execute(content, snippet.getLanguageVersion(), test.getInputs());
+            result = runner.execute(content, snippet.getLanguageVersion(), inputs);
             status =
-                    result.successful() && result.outputs().equals(test.getExpectedOutputs())
+                    result.successful() && result.outputs().equals(expectedOutputs)
                             ? TestStatus.PASSED
                             : TestStatus.FAILED;
         } catch (LanguageServiceException e) {
-            LOG.warn("Could not run test {} of snippet {}", test.getId(), snippet.getId(), e);
+            LOG.warn("Could not run test {} of snippet {}", testId, snippet.getId(), e);
             result = new ExecutionResult(List.of(), List.of(e.getMessage()));
             status = TestStatus.ERROR;
         }
-        test.ran(status);
-        repository.save(test);
         return new TestRunResult(
-                test.getId(), status, result.outputs(), test.getExpectedOutputs(), result.errors());
+                testId, status, result.outputs(), expectedOutputs, result.errors());
     }
 
     private TestCase find(UUID snippetId, UUID testId) {

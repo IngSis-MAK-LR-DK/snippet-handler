@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":language-http"))
     implementation(project(":asset-client"))
     implementation(project(":permission-client"))
+    implementation(project(":auth0-management-client"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -46,4 +47,9 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     classDirectories.setFrom(coveredClasses)
+}
+
+// bootRun corre desde la raiz del repo, donde esta el .env que lee spring.config.import.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir = rootProject.projectDir
 }

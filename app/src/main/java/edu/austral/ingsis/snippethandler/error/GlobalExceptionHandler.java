@@ -5,6 +5,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.UnsupportedLanguageException;
 import edu.austral.ingsis.snippethandler.permission.PermissionDeniedException;
 import edu.austral.ingsis.snippethandler.permission.PermissionServiceException;
+import edu.austral.ingsis.snippethandler.users.UserDirectoryException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, e);
         problem.setProperty("errors", e.getErrors());
         return problem;
+    }
+
+    @ExceptionHandler(UserDirectoryException.class)
+    public ProblemDetail userDirectory(UserDirectoryException e) {
+        return problem(HttpStatus.BAD_GATEWAY, e);
     }
 
     @ExceptionHandler(NotFoundException.class)

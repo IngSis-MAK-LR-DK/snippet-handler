@@ -134,6 +134,13 @@ public class SnippetService {
         return SnippetDetail.of(store.save(snippet, formatted, current, s -> {}), formatted);
     }
 
+    /** Formats source that is not saved yet (editor preview), with the rules of the caller. */
+    public String previewFormat(String userId, String language, String version, String content) {
+        LanguageService service = languages.get(language, version);
+        requireValid(service, content, version);
+        return style.format(userId, service, version, content);
+    }
+
     private static void requireValid(SnippetValidator validator, String content, String version) {
         ValidationResult result = validator.validate(content, version);
         if (!result.valid()) {
