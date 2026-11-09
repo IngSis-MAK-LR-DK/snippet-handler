@@ -3,6 +3,7 @@ package edu.austral.ingsis.snippethandler.rules;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +18,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.reprocessing.RulesChangedPublisher;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,7 @@ class RuleServiceTest {
 
     private final RuleOverrideRepository repository = mock(RuleOverrideRepository.class);
     private final LanguageService printScript = mock(LanguageService.class);
+    private final RulesChangedPublisher publisher = mock(RulesChangedPublisher.class);
 
     private RuleService service;
 
@@ -44,6 +47,7 @@ class RuleServiceTest {
                         repository,
                         new LanguageRegistry(List.of(printScript)),
                         TransactionOperations.withoutTransaction(),
+                        publisher,
                         new SnippetProperties("printscript", null, null, null, null, null, null));
     }
 
@@ -88,6 +92,30 @@ class RuleServiceTest {
                         new RuleView("indentation", "Spaces", true, "2"),
                         new RuleView("space-around-colon", "Colon", false, null));
         verify(repository).save(any());
+        verify(publisher).rulesChanged(USER, RuleType.FORMAT, "printscript");
+    }
+
+    @Test
+    void anEmptyUpdateDoesNotTriggerReprocessing() {
+        service.update(USER, null, RuleType.FORMAT, List.of());
+
+        verify(publisher, never()).rulesChanged(any(), any(), any());
+    }
+
+    @Test
+    void aBrokerThatIsDownDoesNotFailTheUpdate() {
+        when(repository.findAllByUserIdAndType(USER, RuleType.FORMAT)).thenReturn(List.of());
+        doThrow(new IllegalStateException("redis down"))
+                .when(publisher)
+                .rulesChanged(any(), any(), any());
+
+        assertThat(
+                        service.update(
+                                USER,
+                                null,
+                                RuleType.FORMAT,
+                                List.of(new RuleConfig("indentation", true, "2"))))
+                .hasSize(2);
     }
 
     @Test

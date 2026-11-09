@@ -25,13 +25,19 @@ public class SnippetStyle {
     public LintReport lint(
             String ownerId, LanguageService language, String version, String source) {
         try {
-            return LintReport.of(
-                    language.lint(
-                            source, version, rules.enabledRules(ownerId, language, RuleType.LINT)));
+            return lintStrict(ownerId, language, version, source);
         } catch (LanguageServiceException e) {
             LOG.warn("Could not lint a snippet of {}", ownerId, e);
             return LintReport.failed();
         }
+    }
+
+    /** Like {@link #lint} but lets a failing language adapter through, so the caller can retry. */
+    public LintReport lintStrict(
+            String ownerId, LanguageService language, String version, String source) {
+        return LintReport.of(
+                language.lint(
+                        source, version, rules.enabledRules(ownerId, language, RuleType.LINT)));
     }
 
     public String format(String ownerId, LanguageService language, String version, String source) {

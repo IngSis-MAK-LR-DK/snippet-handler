@@ -8,11 +8,15 @@ import java.util.stream.Collectors;
 import edu.austral.ingsis.snippethandler.config.SnippetProperties;
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
+import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.RuleCatalog;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.reprocessing.RulesChangedPublisher;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -23,19 +27,24 @@ import org.springframework.transaction.support.TransactionOperations;
 @Service
 public class RuleService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(RuleService.class);
+
     private final RuleOverrideRepository repository;
     private final LanguageRegistry languages;
     private final TransactionOperations transaction;
+    private final RulesChangedPublisher publisher;
     private final String defaultLanguage;
 
     public RuleService(
             RuleOverrideRepository repository,
             LanguageRegistry languages,
             TransactionOperations transaction,
+            RulesChangedPublisher publisher,
             SnippetProperties properties) {
         this.repository = repository;
         this.languages = languages;
         this.transaction = transaction;
+        this.publisher = publisher;
         this.defaultLanguage = properties.defaultLanguage();
     }
 
@@ -58,7 +67,8 @@ public class RuleService {
     public List<RuleView> update(
             String userId, String language, RuleType type, List<RuleConfig> changes) {
         // The language adapter is asked before the transaction starts.
-        List<RuleDefinition> definitions = resolve(language).defaultRules(type);
+        LanguageService resolved = resolve(language);
+        List<RuleDefinition> definitions = resolved.defaultRules(type);
         Map<String, RuleDefinition> known =
                 definitions.stream()
                         .collect(Collectors.toMap(RuleDefinition::name, Function.identity()));
@@ -82,7 +92,23 @@ public class RuleService {
                             }
                             return overrides;
                         });
+        publishChange(userId, type, resolved.language(), changes.size());
         return views(definitions, updated);
+    }
+
+    /**
+     * US 12 and 15: the stored snippets are reprocessed in the background. The rules are already
+     * saved, so a broker that is down does not undo or fail the update.
+     */
+    private void publishChange(String userId, RuleType type, String language, int applied) {
+        if (applied == 0) {
+            return;
+        }
+        try {
+            publisher.rulesChanged(userId, type, language);
+        } catch (RuntimeException e) {
+            LOG.error("Could not announce the {} rules change of {}", type, userId, e);
+        }
     }
 
     private static List<RuleView> views(
@@ -112,7 +138,7 @@ public class RuleService {
                 .collect(Collectors.toMap(RuleOverride::getName, Function.identity()));
     }
 
-    private RuleCatalog resolve(String language) {
+    private LanguageService resolve(String language) {
         return languages.get(language == null ? defaultLanguage : language);
     }
 }

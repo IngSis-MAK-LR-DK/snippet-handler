@@ -10,6 +10,11 @@ spring:
     url: jdbc:postgresql://localhost:5433/snippets
     username: snippets
     password: snippets
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   jpa:
     open-in-view: false
     hibernate:
@@ -39,6 +44,12 @@ management:
 
 snippet:
   default-language: printscript
+  # US 12 y 15: reproceso en segundo plano de los snippets cuando cambian las reglas.
+  reprocessing:
+    enabled: true
+    max-attempts: 3
+    claim-idle: 30s
+    poll-interval: 500ms
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   asset:

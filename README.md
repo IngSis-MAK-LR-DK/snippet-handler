@@ -47,10 +47,36 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 | `GET /users?query=&page=&size=` (busca en Auth0, excluye al caller) | 7 |
 | `POST /languages/{lang}/versions/{version}/revalidate` (202, en background) | 5 |
 | `GET /languages/revalidations/{id}` (progreso de la revalidación) | 5 |
+| `GET /rules/reprocessing`, `GET /rules/reprocessing/{id}` (progreso del reproceso al cambiar reglas) | 12, 15 |
 
-Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming),
-10, 12 y 15 quedan para cuando se vean en la cursada; `SnippetEventPublisher` es el punto de
-extensión para pasarlas a una cola.
+Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming) y 10
+quedan para cuando se vean en la cursada.
+
+### Reproceso al cambiar reglas (US 12 y 15)
+
+Al modificar reglas de formato (`PUT /rules/format`) o de lint (`PUT /rules/lint`), el request
+responde enseguida y los snippets del usuario se reprocesan en segundo plano con Redis Streams:
+
+1. `RuleService` publica `RulesChanged` en el stream `rules-changed` (después de guardar las reglas).
+2. `ReprocessingFanOut` lo consume, crea un `ReprocessJob` y una `ReprocessTask` (`PENDING`) por
+   snippet del usuario en ese lenguaje, y encola cada tarea en el stream `snippet-reprocess`. En
+   lint además deja los snippets en `PENDING` hasta que se vuelven a evaluar.
+3. `SnippetReprocessor` toma una tarea, lintea o formatea con las reglas **vigentes** del dueño y
+   la marca `DONE`.
+
+Tolerancia a fallos (ambos streams usan el consumer group `snippet-handler`):
+
+| Caso | Qué pasa |
+|---|---|
+| El adaptador falla o responde error | El mensaje no se confirma (ack) y vuelve a entregarse pasado `claim-idle`. |
+| Un snippet falla `max-attempts` veces | Se **saltea**: tarea `FAILED` (y `FAILED` en su lint) y el resto sigue. |
+| El servicio se cae a mitad de camino | Al volver (o en otra réplica) se retoman los mensajes sin confirmar. Los intentos se cuentan antes de procesar, así un snippet que tumba el proceso tampoco se reintenta para siempre. |
+| Mensaje entregado dos veces | Inocuo: una tarea terminada no se vuelve a procesar. |
+| Redis caído al guardar reglas | Las reglas se guardan igual; el reproceso de ese cambio no se dispara y se loguea el error. |
+
+`GET /rules/reprocessing` (últimos 20) y `/{id}` devuelven `total`, `done`, `failed`, `pending` y
+`status` (`RUNNING` / `COMPLETED`). Configuración en `snippet.reprocessing.*` (`enabled`,
+`max-attempts`, `claim-idle`, `poll-interval`) y `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`.
 
 ## Desarrollo
 
