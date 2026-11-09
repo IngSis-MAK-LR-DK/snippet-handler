@@ -145,6 +145,20 @@ class SnippetServiceTest {
     }
 
     @Test
+    void aSnippetWithoutDescriptionCanBeUpdated() {
+        Snippet snippet = new Snippet("My snippet", null, "printscript", "1.0", OWNER);
+        ReflectionTestUtils.setField(snippet, "id", ID);
+        when(access.require(ID, Role.OWNER)).thenReturn(snippet);
+        when(contents.read(ID)).thenReturn("x;");
+
+        SnippetDetail detail =
+                service.update(ID, new SnippetUpdateRequest(null, null, null, null, "y;"));
+
+        assertThat(detail.description()).isNull();
+        verify(contents).write(ID, "y;", "x;");
+    }
+
+    @Test
     void contentUpdateValidatesStoresAndRunsTests() {
         when(access.require(ID, Role.OWNER)).thenReturn(existing());
         when(contents.read(ID)).thenReturn("x;");

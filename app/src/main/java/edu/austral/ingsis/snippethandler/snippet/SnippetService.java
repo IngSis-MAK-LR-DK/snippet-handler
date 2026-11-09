@@ -87,9 +87,10 @@ public class SnippetService {
             requireValid(language, content, version);
             snippet.linted(style.lint(snippet.getOwnerId(), language, version, content));
         }
+        // A snippet may have no description (null): requireNonNullElse would fail on it.
         snippet.rename(
-                Objects.requireNonNullElse(request.name(), snippet.getName()),
-                Objects.requireNonNullElse(request.description(), snippet.getDescription()));
+                request.name() != null ? request.name() : snippet.getName(),
+                request.description() != null ? request.description() : snippet.getDescription());
         snippet.changeLanguage(language.language(), version);
 
         Snippet saved =
