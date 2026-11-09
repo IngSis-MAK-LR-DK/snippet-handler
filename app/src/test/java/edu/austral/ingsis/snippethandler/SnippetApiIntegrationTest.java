@@ -55,6 +55,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -76,6 +77,11 @@ class SnippetApiIntegrationTest {
     @Container @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
+    @Container
+    @ServiceConnection(name = "redis")
+    static final GenericContainer<?> REDIS =
+            new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
     @RegisterExtension
     static final WireMockExtension SERVICES =
             WireMockExtension.newInstance().options(wireMockConfig().dynamicPort()).build();
@@ -87,6 +93,7 @@ class SnippetApiIntegrationTest {
                 () -> "https://test.auth0.local/");
         registry.add(
                 "spring.security.oauth2.resourceserver.jwt.audiences", () -> "snippet-searcher");
+        registry.add("snippet.reprocessing.claim-idle", () -> "1s");
         registry.add("snippet.permission.url", SERVICES::baseUrl);
         registry.add("snippet.languages.printscript.url", SERVICES::baseUrl);
         registry.add("snippet.service-token.auth0-domain", SERVICES::baseUrl);
@@ -111,7 +118,7 @@ class SnippetApiIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.execute("TRUNCATE snippet, test_case, rule_config CASCADE");
+        jdbc.execute("TRUNCATE snippet, test_case, rule_config, reprocess_job CASCADE");
         assets.clear();
         SERVICES.resetAll();
 
@@ -478,6 +485,90 @@ class SnippetApiIntegrationTest {
                                 MockMvcRequestBuilders.post(
                                         "/snippets/" + id + "/tests/" + testId + "/run")))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void changingTheFormatRulesReformatsTheStoredSnippetsInTheBackground() throws Exception {
+        String id = createSnippet("Hello", VALID_SOURCE);
+
+        mvc.perform(
+                        as(
+                                MockMvcRequestBuilders.put("/rules/format")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "[{\"name\": \"indentation\", \"enabled\": true, \"value\": \"2\"}]")))
+                .andExpect(status().isOk());
+
+        awaitReprocessing(1, 0);
+        assertThat(assets.get(id)).contains("formatted;\n");
+    }
+
+    @Test
+    void changingTheLintRulesRechecksTheStoredSnippetsAndSkipsTheOnesThatFail() throws Exception {
+        String good = createSnippet("Good", "let snake_case = 1;");
+        createSnippet("Bad", "let boom = 1;");
+        SERVICES.stubFor(
+                post("/lint")
+                        .atPriority(1)
+                        .withRequestBody(matchingJsonPath("$.content", containing("boom")))
+                        .willReturn(serverError()));
+
+        mvc.perform(
+                        as(
+                                MockMvcRequestBuilders.put("/rules/lint")
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(
+                                                "[{\"name\": \"camel-case\", \"enabled\": false}]")))
+                .andExpect(status().isOk());
+
+        awaitReprocessing(1, 1);
+        mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + good)))
+                .andExpect(jsonPath("$.compliance").value("NOT_COMPLIANT"));
+    }
+
+    @Test
+    void aNewLanguageVersionRevalidatesTheStoredSnippetsInTheBackground() throws Exception {
+        String id = createSnippet("Hello", VALID_SOURCE);
+
+        String body =
+                mvc.perform(
+                                as(
+                                        MockMvcRequestBuilders.post(
+                                                "/languages/printscript/versions/1.0/revalidate")))
+                        .andExpect(status().isAccepted())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        String runId = json.readTree(body).get("id").asText();
+
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .untilAsserted(
+                        () ->
+                                mvc.perform(
+                                                as(
+                                                        MockMvcRequestBuilders.get(
+                                                                "/languages/revalidations/"
+                                                                        + runId)))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.status").value("COMPLETED"))
+                                        .andExpect(jsonPath("$.total").value(1))
+                                        .andExpect(jsonPath("$.processed").value(1))
+                                        .andExpect(jsonPath("$.failed").value(0)));
+        mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
+                .andExpect(jsonPath("$.version").value("1.0"));
+    }
+
+    private void awaitReprocessing(int done, int failed) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .untilAsserted(
+                        () ->
+                                mvc.perform(as(MockMvcRequestBuilders.get("/rules/reprocessing")))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$[0].status").value("COMPLETED"))
+                                        .andExpect(jsonPath("$[0].done").value(done))
+                                        .andExpect(jsonPath("$[0].failed").value(failed)));
     }
 
     @Test

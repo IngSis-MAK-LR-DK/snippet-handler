@@ -1,52 +1,59 @@
 package edu.austral.ingsis.snippethandler.revalidation;
 
-import java.util.List;
 import java.util.UUID;
 
-import edu.austral.ingsis.snippethandler.error.NotFoundException;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
-import edu.austral.ingsis.snippethandler.snippet.SnippetRepository;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessJob;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessJobRepository;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessPublisher;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessRequest;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessingService;
 
 import org.springframework.stereotype.Service;
 
 /**
  * Starts the revalidation of every snippet of a language when a version of that language is
- * available (US 16 applied to parser versions). The work itself runs in the background.
+ * available (US 16 applied to parser versions). It is one more kind of background reprocessing,
+ * with the same tasks, retries and progress as a change of rules.
  */
 @Service
 public class RevalidationService {
 
     private final LanguageRegistry languages;
-    private final SnippetRepository snippets;
-    private final RevalidationRunRepository runs;
-    private final RevalidationWorker worker;
+    private final ReprocessJobRepository jobs;
+    private final ReprocessPublisher publisher;
+    private final ReprocessingService reprocessing;
 
     public RevalidationService(
             LanguageRegistry languages,
-            SnippetRepository snippets,
-            RevalidationRunRepository runs,
-            RevalidationWorker worker) {
+            ReprocessJobRepository jobs,
+            ReprocessPublisher publisher,
+            ReprocessingService reprocessing) {
         this.languages = languages;
-        this.snippets = snippets;
-        this.runs = runs;
-        this.worker = worker;
+        this.jobs = jobs;
+        this.publisher = publisher;
+        this.reprocessing = reprocessing;
     }
 
-    /** Fails fast if the version is not one the language adapter supports. */
+    /**
+     * Fails fast if the version is not one the language adapter supports. The job is saved right
+     * away so the caller can follow it; its tasks are written in the background.
+     */
     public RevalidationRunView start(String language, String version) {
         LanguageService service = languages.get(language, version);
-        List<UUID> ids = snippets.findIdsByLanguage(service.language());
-        RevalidationRun run =
-                runs.save(new RevalidationRun(service.language(), version, ids.size()));
-        worker.revalidate(run.getId(), ids, service.language(), version);
-        return RevalidationRunView.of(run);
+        ReprocessRequest request = ReprocessRequest.revalidation(service.language(), version);
+        ReprocessJob job = jobs.save(ReprocessJob.of(request));
+        try {
+            publisher.request(request);
+        } catch (RuntimeException e) {
+            jobs.delete(job); // nothing will ever process it
+            throw e;
+        }
+        return RevalidationRunView.of(reprocessing.view(job));
     }
 
     public RevalidationRunView find(UUID runId) {
-        return runs.findById(runId)
-                .map(RevalidationRunView::of)
-                .orElseThrow(
-                        () -> new NotFoundException("Revalidation %s not found".formatted(runId)));
+        return RevalidationRunView.of(reprocessing.findRevalidation(runId));
     }
 }

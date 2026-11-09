@@ -3,6 +3,7 @@ package edu.austral.ingsis.snippethandler.rules;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,9 +18,13 @@ import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessPublisher;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessRequest;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessType;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionOperations;
 
 class RuleServiceTest {
@@ -28,6 +33,7 @@ class RuleServiceTest {
 
     private final RuleOverrideRepository repository = mock(RuleOverrideRepository.class);
     private final LanguageService printScript = mock(LanguageService.class);
+    private final ReprocessPublisher publisher = mock(ReprocessPublisher.class);
 
     private RuleService service;
 
@@ -44,6 +50,7 @@ class RuleServiceTest {
                         repository,
                         new LanguageRegistry(List.of(printScript)),
                         TransactionOperations.withoutTransaction(),
+                        publisher,
                         new SnippetProperties("printscript", null, null, null, null, null, null));
     }
 
@@ -88,6 +95,32 @@ class RuleServiceTest {
                         new RuleView("indentation", "Spaces", true, "2"),
                         new RuleView("space-around-colon", "Colon", false, null));
         verify(repository).save(any());
+        ArgumentCaptor<ReprocessRequest> request = ArgumentCaptor.forClass(ReprocessRequest.class);
+        verify(publisher).request(request.capture());
+        assertThat(request.getValue().type()).isEqualTo(ReprocessType.FORMAT);
+        assertThat(request.getValue().userId()).isEqualTo(USER);
+        assertThat(request.getValue().language()).isEqualTo("printscript");
+    }
+
+    @Test
+    void anEmptyUpdateDoesNotTriggerReprocessing() {
+        service.update(USER, null, RuleType.FORMAT, List.of());
+
+        verify(publisher, never()).request(any());
+    }
+
+    @Test
+    void aBrokerThatIsDownDoesNotFailTheUpdate() {
+        when(repository.findAllByUserIdAndType(USER, RuleType.FORMAT)).thenReturn(List.of());
+        doThrow(new IllegalStateException("redis down")).when(publisher).request(any());
+
+        assertThat(
+                        service.update(
+                                USER,
+                                null,
+                                RuleType.FORMAT,
+                                List.of(new RuleConfig("indentation", true, "2"))))
+                .hasSize(2);
     }
 
     @Test

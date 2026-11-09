@@ -16,6 +16,15 @@ services:
       interval: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
     volumes:
@@ -41,6 +50,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/snippets
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-snippets}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-snippets}
+      REDIS_HOST: redis
       ASSET_SERVICE_URL: http://asset-service:8080
       ASSET_CONTAINER: ${ASSET_CONTAINER:-snippets}
       # Permisos y el adaptador corren en sus propios compose: se los alcanza por el host. No se
@@ -60,6 +70,8 @@ services:
       - "8080:8080"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       asset-service:
         condition: service_started
