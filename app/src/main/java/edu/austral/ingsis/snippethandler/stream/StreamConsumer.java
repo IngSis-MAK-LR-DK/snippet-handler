@@ -23,7 +23,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * Member of a consumer group of a Redis stream. Each poll first takes over the messages that were
  * delivered to someone (maybe a consumer that died, maybe a failed attempt of this one) and have
  * stayed unacknowledged for {@code claimIdle}, and then reads the new ones. That is what makes the
- * processing resume after a crash and retry after a failure.
+ * processing resume after a crash and retry after a failure. Entries are deleted once they are
+ * acknowledged, so a stream must be read by one group only.
  */
 public class StreamConsumer implements SmartLifecycle {
 
@@ -91,6 +92,10 @@ public class StreamConsumer implements SmartLifecycle {
             return 1;
         }
         redis.opsForStream().acknowledge(stream, group, record.getId());
+        // A stream keeps its entries after they are acknowledged. This is the only group that reads
+        // it, so a confirmed entry is of no use to anyone: deleting it keeps the stream as small as
+        // what is still pending. Trimming by length would risk dropping entries nobody read yet.
+        redis.opsForStream().delete(stream, record.getId());
         return 1;
     }
 

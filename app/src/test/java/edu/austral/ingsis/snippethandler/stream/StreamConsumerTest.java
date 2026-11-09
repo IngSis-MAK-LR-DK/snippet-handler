@@ -74,6 +74,28 @@ class StreamConsumerTest {
     }
 
     @Test
+    void acknowledgedMessagesAreRemovedFromTheStreamButPendingOnesStay() {
+        String stream = stream();
+        StreamConsumer consumer =
+                consumer(
+                        stream,
+                        "a",
+                        Duration.ofMinutes(5),
+                        fields -> {
+                            if (fields.get("n").equals("bad")) {
+                                throw new IllegalStateException("boom");
+                            }
+                        });
+        publisher.publish(stream, Map.of("n", "1"));
+        publisher.publish(stream, Map.of("n", "2"));
+        publisher.publish(stream, Map.of("n", "bad"));
+
+        consumer.pollOnce();
+
+        assertThat(redis.opsForStream().size(stream)).isEqualTo(1);
+    }
+
+    @Test
     void aFailedMessageIsDeliveredAgainAfterTheClaimTime() throws InterruptedException {
         String stream = stream();
         List<String> attempts = new ArrayList<>();
