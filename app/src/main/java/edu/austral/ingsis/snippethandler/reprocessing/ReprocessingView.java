@@ -3,15 +3,16 @@ package edu.austral.ingsis.snippethandler.reprocessing;
 import java.time.Instant;
 import java.util.UUID;
 
-import edu.austral.ingsis.snippethandler.language.RuleType;
-
 /**
  * Progress of a reprocessing: how many snippets are done, skipped because they failed, or waiting.
+ *
+ * @param version target language version, only for revalidations
  */
 public record ReprocessingView(
         UUID id,
-        RuleType type,
+        ReprocessType type,
         String language,
+        String version,
         Status status,
         long total,
         long done,

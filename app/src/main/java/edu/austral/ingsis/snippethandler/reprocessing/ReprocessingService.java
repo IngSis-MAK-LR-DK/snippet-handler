@@ -7,7 +7,7 @@ import edu.austral.ingsis.snippethandler.error.NotFoundException;
 
 import org.springframework.stereotype.Service;
 
-/** Progress of the reprocessing a user triggered by changing their rules. */
+/** Progress of the background reprocessing of snippets. */
 @Service
 public class ReprocessingService {
 
@@ -19,20 +19,28 @@ public class ReprocessingService {
         this.tasks = tasks;
     }
 
-    /** The latest ones, newest first. */
+    /** The latest ones a user triggered by changing their rules, newest first. */
     public List<ReprocessingView> list(String userId) {
         return jobs.findTop20ByUserIdOrderByCreatedAtDesc(userId).stream().map(this::view).toList();
     }
 
+    /** A job of a user. */
     public ReprocessingView find(String userId, UUID id) {
         return jobs.findById(id)
-                .filter(job -> job.getUserId().equals(userId))
+                .filter(job -> userId.equals(job.getUserId()))
                 .map(this::view)
-                .orElseThrow(
-                        () -> new NotFoundException("Reprocessing %s not found".formatted(id)));
+                .orElseThrow(() -> notFound(id));
     }
 
-    private ReprocessingView view(ReprocessJob job) {
+    /** A revalidation by language version, which does not belong to any one user. */
+    public ReprocessingView findRevalidation(UUID id) {
+        return jobs.findById(id)
+                .filter(job -> job.getType() == ReprocessType.REVALIDATE)
+                .map(this::view)
+                .orElseThrow(() -> notFound(id));
+    }
+
+    public ReprocessingView view(ReprocessJob job) {
         long done = 0;
         long failed = 0;
         long pending = 0;
@@ -47,11 +55,18 @@ public class ReprocessingService {
                 job.getId(),
                 job.getType(),
                 job.getLanguage(),
-                pending == 0 ? ReprocessingView.Status.COMPLETED : ReprocessingView.Status.RUNNING,
+                job.getLanguageVersion(),
+                job.isExpanded() && pending == 0
+                        ? ReprocessingView.Status.COMPLETED
+                        : ReprocessingView.Status.RUNNING,
                 done + failed + pending,
                 done,
                 failed,
                 pending,
                 job.getCreatedAt());
+    }
+
+    private static NotFoundException notFound(UUID id) {
+        return new NotFoundException("Reprocessing %s not found".formatted(id));
     }
 }

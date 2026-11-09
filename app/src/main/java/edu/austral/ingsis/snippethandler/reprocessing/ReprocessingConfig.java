@@ -20,11 +20,11 @@ public class ReprocessingConfig {
     private final String consumerName = "handler-" + UUID.randomUUID();
 
     @Bean
-    StreamConsumer rulesChangedConsumer(
+    StreamConsumer requestsConsumer(
             StringRedisTemplate redis,
             ReprocessingFanOut fanOut,
             ReprocessingProperties properties) {
-        return consumer(redis, Streams.RULES_CHANGED, properties, fanOut::handle);
+        return consumer(redis, Streams.REQUESTS, properties, fanOut::handle);
     }
 
     @Bean

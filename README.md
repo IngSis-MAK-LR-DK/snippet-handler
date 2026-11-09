@@ -52,31 +52,42 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming) y 10
 quedan para cuando se vean en la cursada.
 
-### Reproceso al cambiar reglas (US 12 y 15)
+### Procesamiento en segundo plano (US 12, 15 y revalidación)
 
-Al modificar reglas de formato (`PUT /rules/format`) o de lint (`PUT /rules/lint`), el request
-responde enseguida y los snippets del usuario se reprocesan en segundo plano con Redis Streams:
+Hay **un solo sistema** para todo lo que se hace sobre snippets ya guardados, con Redis Streams.
+Un job aplica una operación a cada snippet:
 
-1. `RuleService` publica `RulesChanged` en el stream `rules-changed` (después de guardar las reglas).
-2. `ReprocessingFanOut` lo consume, crea un `ReprocessJob` y una `ReprocessTask` (`PENDING`) por
-   snippet del usuario en ese lenguaje, y encola cada tarea en el stream `snippet-reprocess`. En
-   lint además deja los snippets en `PENDING` hasta que se vuelven a evaluar.
-3. `SnippetReprocessor` toma una tarea, lintea o formatea con las reglas **vigentes** del dueño y
-   la marca `DONE`.
+| Tipo | Se dispara con | Qué hace con cada snippet |
+|---|---|---|
+| `LINT` (US 15) | `PUT /rules/lint` | Lo lintea con las reglas vigentes de su dueño |
+| `FORMAT` (US 12) | `PUT /rules/format` | Lo formatea con las reglas vigentes de su dueño |
+| `REVALIDATE` | `POST /languages/{lang}/versions/{version}/revalidate` | Si es válido en la versión nueva, lo mueve a ella y lo lintea; si no, queda `FAILED` y conserva su versión |
+
+Los endpoints responden enseguida y el trabajo sigue en segundo plano:
+
+1. Quien dispara publica un `ReprocessRequest` en el stream `reprocess-requests` (las reglas se
+   guardan antes; una revalidación guarda su job y devuelve el id).
+2. `ReprocessingFanOut` lo consume, crea el `ReprocessJob` y una `ReprocessTask` (`PENDING`) por
+   snippet (los del usuario en reglas; los de todos en una revalidación) y encola cada tarea en el
+   stream `snippet-reprocess`. En `LINT` deja además los snippets en `PENDING` hasta evaluarlos.
+3. `SnippetReprocessor` toma una tarea, hace la operación del tipo del job y la marca `DONE`.
 
 Tolerancia a fallos (ambos streams usan el consumer group `snippet-handler`):
 
 | Caso | Qué pasa |
 |---|---|
 | El adaptador falla o responde error | El mensaje no se confirma (ack) y vuelve a entregarse pasado `claim-idle`. |
-| Un snippet falla `max-attempts` veces | Se **saltea**: tarea `FAILED` (y `FAILED` en su lint) y el resto sigue. |
+| Un snippet falla `max-attempts` veces | Se **saltea**: tarea `FAILED` y el resto sigue. En `LINT` el snippet queda con lint `FAILED`. |
 | El servicio se cae a mitad de camino | Al volver (o en otra réplica) se retoman los mensajes sin confirmar. Los intentos se cuentan antes de procesar, así un snippet que tumba el proceso tampoco se reintenta para siempre. |
 | Mensaje entregado dos veces | Inocuo: una tarea terminada no se vuelve a procesar. |
 | Redis caído al guardar reglas | Las reglas se guardan igual; el reproceso de ese cambio no se dispara y se loguea el error. |
+| Redis caído al pedir una revalidación | El endpoint falla y no queda ningún job colgado. |
 
-`GET /rules/reprocessing` (últimos 20) y `/{id}` devuelven `total`, `done`, `failed`, `pending` y
-`status` (`RUNNING` / `COMPLETED`). Configuración en `snippet.reprocessing.*` (`enabled`,
-`max-attempts`, `claim-idle`, `poll-interval`) y `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`.
+Progreso: `GET /rules/reprocessing` (últimos 20 del usuario) y `/{id}`, y
+`GET /languages/revalidations/{id}`. Devuelven `total`, `done`, `failed`, `pending` y `status`
+(`RUNNING` / `COMPLETED`; la revalidación muestra `processed` = `done` + `failed`). Configuración en
+`snippet.reprocessing.*` (`enabled`, `max-attempts`, `claim-idle`, `poll-interval`) y
+`REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`.
 
 ## Desarrollo
 

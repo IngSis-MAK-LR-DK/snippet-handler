@@ -13,7 +13,8 @@ import edu.austral.ingsis.snippethandler.language.RuleCatalog;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
-import edu.austral.ingsis.snippethandler.reprocessing.RulesChangedPublisher;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessPublisher;
+import edu.austral.ingsis.snippethandler.reprocessing.ReprocessRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,14 +33,14 @@ public class RuleService {
     private final RuleOverrideRepository repository;
     private final LanguageRegistry languages;
     private final TransactionOperations transaction;
-    private final RulesChangedPublisher publisher;
+    private final ReprocessPublisher publisher;
     private final String defaultLanguage;
 
     public RuleService(
             RuleOverrideRepository repository,
             LanguageRegistry languages,
             TransactionOperations transaction,
-            RulesChangedPublisher publisher,
+            ReprocessPublisher publisher,
             SnippetProperties properties) {
         this.repository = repository;
         this.languages = languages;
@@ -105,7 +106,7 @@ public class RuleService {
             return;
         }
         try {
-            publisher.rulesChanged(userId, type, language);
+            publisher.request(ReprocessRequest.rulesChanged(userId, type, language));
         } catch (RuntimeException e) {
             LOG.error("Could not announce the {} rules change of {}", type, userId, e);
         }

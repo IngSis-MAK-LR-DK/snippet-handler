@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import edu.austral.ingsis.snippethandler.language.RuleType;
 import edu.austral.ingsis.snippethandler.snippet.Compliance;
 import edu.austral.ingsis.snippethandler.snippet.SnippetRepository;
 import edu.austral.ingsis.snippethandler.stream.StreamPublisher;
@@ -13,9 +12,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionOperations;
 
 /**
- * Reacts to {@link RulesChanged}: writes a task per snippet of the user (status {@code PENDING})
- * and queues each one on the {@link Streams#SNIPPET_REPROCESS} stream. Receiving the same message
- * twice is harmless: the job already exists and only the unfinished tasks are queued again.
+ * Reacts to a {@link ReprocessRequest}: makes sure its job exists, writes a task per snippet to
+ * process (status {@code PENDING}) and queues each one on the {@link Streams#SNIPPET_REPROCESS}
+ * stream. Receiving the same request twice is harmless: the job and its tasks already exist and
+ * only the unfinished tasks are queued again.
  */
 @Component
 public class ReprocessingFanOut {
@@ -40,22 +40,31 @@ public class ReprocessingFanOut {
     }
 
     public void handle(Map<String, String> fields) {
-        RulesChanged event = RulesChanged.from(fields);
-        if (!jobs.existsById(event.id())) {
-            transaction.executeWithoutResult(status -> createJob(event));
-        }
-        for (ReprocessTask task : tasks.findAllByJobIdAndStatus(event.id(), TaskStatus.PENDING)) {
+        ReprocessRequest request = ReprocessRequest.from(fields);
+        transaction.executeWithoutResult(status -> createTasks(request));
+        for (ReprocessTask task : tasks.findAllByJobIdAndStatus(request.id(), TaskStatus.PENDING)) {
             streams.publish(Streams.SNIPPET_REPROCESS, Map.of("taskId", task.getId().toString()));
         }
     }
 
-    private void createJob(RulesChanged event) {
-        jobs.save(new ReprocessJob(event.id(), event.userId(), event.type(), event.language()));
-        List<UUID> ids = snippets.findIdsByOwnerIdAndLanguage(event.userId(), event.language());
-        tasks.saveAll(ids.stream().map(id -> new ReprocessTask(event.id(), id)).toList());
-        if (event.type() == RuleType.LINT) {
-            // The user sees which snippets are still waiting for their new lint result.
-            snippets.markCompliance(event.userId(), event.language(), Compliance.PENDING);
+    private void createTasks(ReprocessRequest request) {
+        // A revalidation job is created when it is requested, so the caller already has its id.
+        ReprocessJob job =
+                jobs.findById(request.id()).orElseGet(() -> jobs.save(ReprocessJob.of(request)));
+        if (job.isExpanded()) {
+            return;
         }
+        List<UUID> ids =
+                request.type() == ReprocessType.REVALIDATE
+                        ? snippets.findIdsByLanguage(request.language())
+                        : snippets.findIdsByOwnerIdAndLanguage(
+                                request.userId(), request.language());
+        tasks.saveAll(ids.stream().map(id -> new ReprocessTask(request.id(), id)).toList());
+        if (request.type() == ReprocessType.LINT) {
+            // The user sees which snippets are still waiting for their new lint result.
+            snippets.markCompliance(request.userId(), request.language(), Compliance.PENDING);
+        }
+        job.markExpanded();
+        jobs.save(job);
     }
 }

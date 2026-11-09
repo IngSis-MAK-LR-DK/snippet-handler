@@ -526,6 +526,39 @@ class SnippetApiIntegrationTest {
                 .andExpect(jsonPath("$.compliance").value("NOT_COMPLIANT"));
     }
 
+    @Test
+    void aNewLanguageVersionRevalidatesTheStoredSnippetsInTheBackground() throws Exception {
+        String id = createSnippet("Hello", VALID_SOURCE);
+
+        String body =
+                mvc.perform(
+                                as(
+                                        MockMvcRequestBuilders.post(
+                                                "/languages/printscript/versions/1.0/revalidate")))
+                        .andExpect(status().isAccepted())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        String runId = json.readTree(body).get("id").asText();
+
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .untilAsserted(
+                        () ->
+                                mvc.perform(
+                                                as(
+                                                        MockMvcRequestBuilders.get(
+                                                                "/languages/revalidations/"
+                                                                        + runId)))
+                                        .andExpect(status().isOk())
+                                        .andExpect(jsonPath("$.status").value("COMPLETED"))
+                                        .andExpect(jsonPath("$.total").value(1))
+                                        .andExpect(jsonPath("$.processed").value(1))
+                                        .andExpect(jsonPath("$.failed").value(0)));
+        mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
+                .andExpect(jsonPath("$.version").value("1.0"));
+    }
+
     private void awaitReprocessing(int done, int failed) {
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.language.RuleType;
@@ -37,10 +38,12 @@ class ReprocessingFanOutTest {
 
     @Test
     void createsATaskPerSnippetAndQueuesThem() {
-        RulesChanged event = RulesChanged.of(USER, RuleType.FORMAT, "printscript");
+        ReprocessRequest event =
+                ReprocessRequest.rulesChanged(USER, RuleType.FORMAT, "printscript");
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
-        when(jobs.existsById(event.id())).thenReturn(false);
+        when(jobs.findById(event.id())).thenReturn(Optional.empty());
+        when(jobs.save(any())).thenAnswer(call -> call.getArgument(0));
         when(snippets.findIdsByOwnerIdAndLanguage(USER, "printscript"))
                 .thenReturn(List.of(first, second));
         ReprocessTask a = task(event.id(), first);
@@ -63,8 +66,9 @@ class ReprocessingFanOutTest {
 
     @Test
     void lintMarksTheSnippetsAsPendingUntilTheyAreRechecked() {
-        RulesChanged event = RulesChanged.of(USER, RuleType.LINT, "printscript");
-        when(jobs.existsById(event.id())).thenReturn(false);
+        ReprocessRequest event = ReprocessRequest.rulesChanged(USER, RuleType.LINT, "printscript");
+        when(jobs.findById(event.id())).thenReturn(Optional.empty());
+        when(jobs.save(any())).thenAnswer(call -> call.getArgument(0));
         when(snippets.findIdsByOwnerIdAndLanguage(USER, "printscript")).thenReturn(List.of());
 
         fanOut.handle(event.toFields());
@@ -73,16 +77,34 @@ class ReprocessingFanOutTest {
     }
 
     @Test
+    void aRevalidationTakesTheSnippetsOfEveryOwner() {
+        ReprocessRequest request = ReprocessRequest.revalidation("printscript", "1.2");
+        ReprocessJob job = ReprocessJob.of(request);
+        when(jobs.findById(request.id())).thenReturn(Optional.of(job));
+        UUID id = UUID.randomUUID();
+        when(snippets.findIdsByLanguage("printscript")).thenReturn(List.of(id));
+
+        fanOut.handle(request.toFields());
+
+        verify(snippets, never()).findIdsByOwnerIdAndLanguage(any(), any());
+        verify(snippets, never()).markCompliance(any(), any(), any());
+        assertThat(job.isExpanded()).isTrue();
+        verify(tasks).saveAll(any());
+    }
+
+    @Test
     void aRedeliveredEventOnlyQueuesWhatIsStillPending() {
-        RulesChanged event = RulesChanged.of(USER, RuleType.FORMAT, "printscript");
-        when(jobs.existsById(event.id())).thenReturn(true);
+        ReprocessRequest event =
+                ReprocessRequest.rulesChanged(USER, RuleType.FORMAT, "printscript");
+        ReprocessJob existing = ReprocessJob.of(event);
+        existing.markExpanded();
+        when(jobs.findById(event.id())).thenReturn(Optional.of(existing));
         ReprocessTask left = task(event.id(), UUID.randomUUID());
         when(tasks.findAllByJobIdAndStatus(event.id(), TaskStatus.PENDING))
                 .thenReturn(List.of(left));
 
         fanOut.handle(event.toFields());
 
-        verify(jobs, never()).save(any());
         verify(tasks, never()).saveAll(any());
         verify(streams, times(1)).publish(eq(Streams.SNIPPET_REPROCESS), any());
     }
