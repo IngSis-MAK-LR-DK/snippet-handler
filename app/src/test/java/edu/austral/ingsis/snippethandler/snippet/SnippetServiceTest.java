@@ -85,7 +85,7 @@ class SnippetServiceTest {
         assertThat(detail.language()).isEqualTo("printscript");
         assertThat(detail.compliance()).isEqualTo(Compliance.COMPLIANT);
         verify(contents).write(ID, "x;", null);
-        verify(permissions).registerOwner(ID);
+        verify(permissions).registerOwner(ID, OWNER);
     }
 
     @Test

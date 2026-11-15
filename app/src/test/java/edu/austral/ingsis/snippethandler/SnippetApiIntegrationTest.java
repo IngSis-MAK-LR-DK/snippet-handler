@@ -219,10 +219,18 @@ class SnippetApiIntegrationTest {
 
         String id = json.readTree(body).get("id").asText();
         assertThat(assets.get(id)).contains(VALID_SOURCE);
+        // The owner is vouched for with the handler's own token, not the user's, and the user
+        // travels in the body: the permissions service refuses this call from a user token.
         SERVICES.verify(
                 postRequestedFor(urlEqualTo("/permissions"))
-                        .withHeader("Authorization", equalTo("Bearer token"))
-                        .withRequestBody(equalToJson("{\"snippetId\": \"" + id + "\"}")));
+                        .withHeader("Authorization", equalTo("Bearer service-token"))
+                        .withRequestBody(
+                                equalToJson(
+                                        "{\"snippetId\": \""
+                                                + id
+                                                + "\", \"ownerId\": \""
+                                                + ALICE
+                                                + "\"}")));
         // The language adapter also requires the user's token.
         SERVICES.verify(
                 postRequestedFor(urlEqualTo("/validate"))

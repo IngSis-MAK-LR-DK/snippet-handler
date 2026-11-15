@@ -14,28 +14,32 @@ import org.springframework.web.client.RestClientException;
 
 /**
  * {@link PermissionService} backed by the permissions service over HTTP (see
- * docs/permission-service-contract.md). The given {@link RestClient} is expected to forward the
- * caller's bearer token.
+ * docs/permission-service-contract.md). It takes two {@link RestClient}s: {@code client} is
+ * expected to forward the caller's bearer token, and {@code serviceClient} to authenticate with the
+ * handler's own token (client credentials), which is what registering an owner requires.
  */
 public class HttpPermissionService implements PermissionService {
 
     private static final String SNIPPET_PATH = "/permissions/{snippetId}";
 
     private final RestClient client;
+    private final RestClient serviceClient;
 
-    public HttpPermissionService(RestClient client) {
+    public HttpPermissionService(RestClient client, RestClient serviceClient) {
         this.client = client;
+        this.serviceClient = serviceClient;
     }
 
     @Override
-    public void registerOwner(UUID snippetId) {
+    public void registerOwner(UUID snippetId, String ownerId) {
         call(
                 "register owner of " + snippetId,
                 () ->
-                        client.post()
+                        serviceClient
+                                .post()
                                 .uri("/permissions")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .body(new RegisterRequest(snippetId.toString()))
+                                .body(new RegisterRequest(snippetId.toString(), ownerId))
                                 .retrieve()
                                 .toBodilessEntity());
     }
@@ -118,7 +122,7 @@ public class HttpPermissionService implements PermissionService {
         return new PermissionServiceException("Permission service failed to " + operation, e);
     }
 
-    record RegisterRequest(String snippetId) {}
+    record RegisterRequest(String snippetId, String ownerId) {}
 
     record RoleResponse(Role role) {}
 

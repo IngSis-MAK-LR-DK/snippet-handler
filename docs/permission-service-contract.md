@@ -8,6 +8,11 @@ Acordado con el equipo de `permission-service`. Si cambia, en el handler solo se
   y su base en 5433.
 - El handler reenvía el JWT de Auth0 del usuario en `Authorization: Bearer <token>`. Permisos
   saca el usuario del `sub`: no se manda el userId en los bodies (salvo a quién se comparte).
+- **Excepción: registrar un dueño (1).** Lo declara el handler, no el usuario: va con el token del
+  **propio handler** (client credentials, la app M2M `snippet-handler-service`) y el dueño viaja en
+  el body. Permisos acepta ese endpoint solo si el claim `azp` del token es el `client_id` de esa
+  app (`AUTH0_SERVICE_CLIENT_ID`, la misma variable en los dos servicios). Un token de usuario recibe
+  `403`: si no, cualquier usuario autenticado podría quedarse como dueño de un snippet sin dueño.
 - `snippetId` es un UUID (string) que genera el handler al crear el snippet.
 - Roles: `OWNER` (edita, comparte, borra) y `READER` (lee el snippet y sus tests, y los corre).
 
@@ -15,7 +20,7 @@ Acordado con el equipo de `permission-service`. Si cambia, en el handler solo se
 
 | # | Método y path | Body | Respuesta |
 |---|---|---|---|
-| 1 | `POST /permissions` | `{"snippetId": "..."}` | `201`; `409` si ya existe |
+| 1 | `POST /permissions` (token del handler) | `{"snippetId": "...", "ownerId": "auth0\|..."}` | `201`; `403` si el token no es del handler; `409` si ya existe |
 | 2 | `POST /permissions/{snippetId}/share` | `{"userId": "auth0\|..."}` | `204`; `403` si no es OWNER; `409` si ya estaba compartido |
 | 3 | `GET /permissions/snippets?relation=owner\|shared\|all` (default `all`) | — | `200 [{"snippetId": "...", "role": "OWNER"}]` |
 | 4 | `GET /permissions/{snippetId}` | — | `200 {"role": "OWNER" \| "READER" \| "NONE"}` |
@@ -25,7 +30,7 @@ Acordado con el equipo de `permission-service`. Si cambia, en el handler solo se
 
 | Operación del handler | Llamada | Rol mínimo |
 |---|---|---|
-| Crear snippet | (1) después de validar y guardar; si falla se revierte todo | — |
+| Crear snippet | (1), con el token del handler y el `userId` del usuario como dueño, después de validar y guardar; si falla se revierte todo | — |
 | Ver, descargar, listar tests, correr un test | (4) | `READER` |
 | Editar, formatear, crear/editar/borrar tests | (4) | `OWNER` |
 | Compartir | (4) y después (2) | `OWNER` |
