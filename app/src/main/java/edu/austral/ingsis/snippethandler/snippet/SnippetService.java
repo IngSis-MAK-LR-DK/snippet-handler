@@ -63,7 +63,8 @@ public class SnippetService {
         snippet.linted(style.lint(userId, language, request.version(), content));
 
         Snippet saved =
-                store.save(snippet, content, null, s -> permissions.registerOwner(s.getId()));
+                store.save(
+                        snippet, content, null, s -> permissions.registerOwner(s.getId(), userId));
         return SnippetDetail.of(saved, content);
     }
 

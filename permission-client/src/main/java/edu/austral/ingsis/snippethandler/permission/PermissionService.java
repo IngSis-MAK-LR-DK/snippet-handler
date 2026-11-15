@@ -5,12 +5,18 @@ import java.util.UUID;
 
 /**
  * Permissions service: knows who owns each snippet and with whom it is shared. Every call acts on
- * behalf of the authenticated user whose token is forwarded with the request.
+ * behalf of the authenticated user whose token is forwarded with the request, except {@link
+ * #registerOwner}.
  */
 public interface PermissionService {
 
-    /** Registers the current user as the owner of a new snippet. */
-    void registerOwner(UUID snippetId);
+    /**
+     * Registers {@code ownerId} as the owner of a new snippet. It is the handler who vouches for
+     * who the owner is, so this call is made with the handler's own service token and not with the
+     * caller's: the permissions service only accepts it from a trusted service, otherwise any user
+     * could claim a snippet that has no owner yet.
+     */
+    void registerOwner(UUID snippetId, String ownerId);
 
     /** Role of the current user over the snippet; {@link Role#NONE} if they have no access. */
     Role roleOf(UUID snippetId);

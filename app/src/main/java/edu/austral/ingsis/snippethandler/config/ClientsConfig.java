@@ -5,7 +5,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
 
 import edu.austral.ingsis.snippethandler.asset.AssetStore;
 import edu.austral.ingsis.snippethandler.asset.HttpAssetStore;
@@ -16,6 +15,8 @@ import edu.austral.ingsis.snippethandler.language.http.HttpLanguageService;
 import edu.austral.ingsis.snippethandler.permission.HttpPermissionService;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.security.BearerTokenForwardingInterceptor;
+import edu.austral.ingsis.snippethandler.security.ServiceTokenInterceptor;
+import edu.austral.ingsis.snippethandler.security.ServiceTokenSource;
 import edu.austral.ingsis.snippethandler.users.Auth0UserDirectory;
 import edu.austral.ingsis.snippethandler.users.UserDirectory;
 
@@ -41,9 +42,11 @@ public class ClientsConfig {
      */
     @Bean
     public LanguageRegistry languageRegistry(
-            SnippetProperties properties, RestClient.Builder builder) {
+            SnippetProperties properties,
+            ServiceTokenSource serviceToken,
+            RestClient.Builder builder) {
         BearerTokenForwardingInterceptor tokens =
-                new BearerTokenForwardingInterceptor(serviceToken(properties, builder));
+                new BearerTokenForwardingInterceptor(serviceToken::token);
         List<LanguageService> services =
                 properties.languages().entrySet().stream()
                         .map(
@@ -62,13 +65,20 @@ public class ClientsConfig {
         return new LanguageRegistry(services);
     }
 
-    private static Supplier<String> serviceToken(
+    /**
+     * The handler's own token, shared by everything that acts as the handler: background calls to
+     * the adapters and owner registration. One instance, so the token is requested from Auth0 once
+     * and reused.
+     */
+    @Bean
+    public ServiceTokenSource serviceTokenSource(
             SnippetProperties properties, RestClient.Builder builder) {
         SnippetProperties.ServiceToken config = properties.serviceToken();
         if (config == null || !config.configured()) {
             LOG.warn(
                     "AUTH0_SERVICE_CLIENT_ID is not set: background calls to the language"
-                            + " adapters will go without a token");
+                            + " adapters will go without a token and snippets cannot be created"
+                            + " (the permissions service only accepts owners from this client)");
             return () -> null;
         }
         Auth0ClientCredentialsToken token =
@@ -87,16 +97,28 @@ public class ClientsConfig {
                 client(builder, properties.asset().url()), properties.asset().container());
     }
 
+    /**
+     * Two clients towards the same service: most calls act on behalf of the user (their token is
+     * forwarded); registering an owner is made with the handler's own token.
+     */
     @Bean
     public PermissionService permissionService(
-            SnippetProperties properties, RestClient.Builder builder) {
-        RestClient client =
+            SnippetProperties properties,
+            ServiceTokenSource serviceToken,
+            RestClient.Builder builder) {
+        RestClient onBehalfOfUser =
                 builder.clone()
                         .baseUrl(properties.permission().url())
                         .requestFactory(requestFactory())
                         .requestInterceptor(new BearerTokenForwardingInterceptor())
                         .build();
-        return new HttpPermissionService(client);
+        RestClient asTheHandler =
+                builder.clone()
+                        .baseUrl(properties.permission().url())
+                        .requestFactory(requestFactory())
+                        .requestInterceptor(new ServiceTokenInterceptor(serviceToken))
+                        .build();
+        return new HttpPermissionService(onBehalfOfUser, asTheHandler);
     }
 
     @Bean
