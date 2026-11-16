@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -31,6 +32,8 @@ public class StreamConsumer implements SmartLifecycle {
     private static final Logger LOG = LoggerFactory.getLogger(StreamConsumer.class);
     private static final int BATCH = 50;
     private static final Duration RETRY_BACKOFF = Duration.ofSeconds(5);
+    static final String STREAM = "stream";
+    static final String MESSAGE_ID = "messageId";
 
     private final StringRedisTemplate redis;
     private final String stream;
@@ -83,6 +86,18 @@ public class StreamConsumer implements SmartLifecycle {
     }
 
     private int process(MapRecord<String, String, String> record) {
+        // No request here: the context of the log lines is the message being handled.
+        MDC.put(STREAM, stream);
+        MDC.put(MESSAGE_ID, record.getId().getValue());
+        try {
+            return handle(record);
+        } finally {
+            MDC.remove(STREAM);
+            MDC.remove(MESSAGE_ID);
+        }
+    }
+
+    private int handle(MapRecord<String, String, String> record) {
         Map<String, String> fields = record.getValue();
         try {
             handler.handle(fields);

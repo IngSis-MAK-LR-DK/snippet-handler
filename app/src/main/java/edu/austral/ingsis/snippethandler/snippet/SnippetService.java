@@ -13,6 +13,8 @@ import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Role;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +24,9 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SnippetService {
+
+    // Changes of state, with what changed. Who did it is in the logging context (user).
+    private static final Logger LOG = LoggerFactory.getLogger(SnippetService.class);
 
     private final SnippetStore store;
     private final SnippetAccess access;
@@ -65,6 +70,11 @@ public class SnippetService {
         Snippet saved =
                 store.save(
                         snippet, content, null, s -> permissions.registerOwner(s.getId(), userId));
+        LOG.info(
+                "snippet created snippetId={} language={} version={}",
+                saved.getId(),
+                saved.getLanguage(),
+                saved.getLanguageVersion());
         return SnippetDetail.of(saved, content);
     }
 
@@ -105,12 +115,14 @@ public class SnippetService {
                                 events.snippetUpdated(id);
                             }
                         });
+        LOG.info("snippet updated snippetId={} sourceChanged={}", id, sourceChanged);
         return SnippetDetail.of(saved, content);
     }
 
     public void delete(UUID id) {
         access.require(id, Role.OWNER);
         store.delete(id, () -> permissions.removeSnippet(id));
+        LOG.info("snippet deleted snippetId={}", id);
     }
 
     /** US 7: the target user gets read access over the snippet and its tests. */
@@ -120,6 +132,7 @@ public class SnippetService {
             throw new BadRequestException("A snippet cannot be shared with its owner");
         }
         permissions.share(id, userId);
+        LOG.info("snippet shared snippetId={} with={}", id, userId);
     }
 
     /** Applies the owner's format rules and stores the result. */
@@ -130,10 +143,13 @@ public class SnippetService {
         String current = contents.read(id);
         String formatted = style.format(snippet.getOwnerId(), language, version, current);
         if (formatted.equals(current)) {
+            LOG.info("snippet formatted snippetId={} changed=false", id);
             return SnippetDetail.of(snippet, current);
         }
         snippet.linted(style.lint(snippet.getOwnerId(), language, version, formatted));
-        return SnippetDetail.of(store.save(snippet, formatted, current, s -> {}), formatted);
+        Snippet saved = store.save(snippet, formatted, current, s -> {});
+        LOG.info("snippet formatted snippetId={} changed=true", id);
+        return SnippetDetail.of(saved, formatted);
     }
 
     /** Formats source that is not saved yet (editor preview), with the rules of the caller. */

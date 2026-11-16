@@ -13,6 +13,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -158,6 +159,30 @@ class StreamConsumerTest {
             consumer.stop();
         }
         assertThat(consumer.isRunning()).isFalse();
+    }
+
+    @Test
+    void theLinesLoggedWhileHandlingAMessageSayWhichMessageItIs() {
+        String stream = stream();
+        List<String> context = new ArrayList<>();
+        StreamConsumer consumer =
+                consumer(
+                        stream,
+                        "a",
+                        Duration.ofMinutes(5),
+                        fields -> {
+                            context.add(MDC.get(StreamConsumer.STREAM));
+                            context.add(MDC.get(StreamConsumer.MESSAGE_ID));
+                        });
+        publisher.publish(stream, Map.of("n", "1"));
+
+        consumer.pollOnce();
+
+        assertThat(context).hasSize(2);
+        assertThat(context.get(0)).isEqualTo(stream);
+        assertThat(context.get(1)).matches("\\d+-\\d+"); // a Redis entry id
+        assertThat(MDC.get(StreamConsumer.STREAM)).isNull();
+        assertThat(MDC.get(StreamConsumer.MESSAGE_ID)).isNull();
     }
 
     private static StreamConsumer collecting(

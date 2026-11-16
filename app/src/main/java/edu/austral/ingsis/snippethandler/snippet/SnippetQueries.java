@@ -8,6 +8,8 @@ import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Role;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Service;
 /** Read side of snippets: viewing, listing and downloading. Never changes anything. */
 @Service
 public class SnippetQueries {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SnippetQueries.class);
 
     private final SnippetRepository repository;
     private final SnippetAccess access;
@@ -47,12 +51,20 @@ public class SnippetQueries {
     /** US 5: snippets the user can access, filtered and sorted. */
     public Page<SnippetSummary> list(SnippetFilter filter, Pageable pageable) {
         List<UUID> ids = permissions.accessibleSnippets(filter.relation());
-        if (ids.isEmpty()) {
-            return Page.empty(pageable);
-        }
-        return repository
-                .findAll(SnippetSpecifications.matching(ids, filter), pageable)
-                .map(SnippetSummary::of);
+        Page<SnippetSummary> page =
+                ids.isEmpty()
+                        ? Page.empty(pageable)
+                        : repository
+                                .findAll(SnippetSpecifications.matching(ids, filter), pageable)
+                                .map(SnippetSummary::of);
+        // "Listed 0" while permissions knows of some, or permissions knowing of none, tells where
+        // the snippets of a user went missing.
+        LOG.info(
+                "snippets listed relation={} accessible={} matching={}",
+                filter.relation(),
+                ids.size(),
+                page.getTotalElements());
+        return page;
     }
 
     /** US 13: original or formatted with the owner's format rules. */

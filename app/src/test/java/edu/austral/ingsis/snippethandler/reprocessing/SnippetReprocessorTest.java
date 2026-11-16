@@ -17,6 +17,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
+import edu.austral.ingsis.snippethandler.observability.UserContextFilter;
 import edu.austral.ingsis.snippethandler.snippet.Compliance;
 import edu.austral.ingsis.snippethandler.snippet.LintReport;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
@@ -27,6 +28,7 @@ import edu.austral.ingsis.snippethandler.snippet.SnippetStyle;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SnippetReprocessorTest {
@@ -222,6 +224,28 @@ class SnippetReprocessorTest {
         reprocessor.handle(Map.of("taskId", UUID.randomUUID().toString()));
 
         verify(tasks, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void theLinesOfATaskSayWhoseJobAndWhichSnippetItIs() {
+        givenTask(ReprocessType.LINT);
+        List<String> context = new java.util.ArrayList<>();
+        when(style.lintStrict(OWNER, service, "1.0", "let x=1;"))
+                .thenAnswer(
+                        invocation -> {
+                            context.add(MDC.get(UserContextFilter.USER));
+                            context.add(MDC.get(SnippetReprocessor.JOB_ID));
+                            context.add(MDC.get(SnippetReprocessor.SNIPPET_ID));
+                            return LintReport.of(List.of());
+                        });
+
+        reprocessor.handle(message());
+
+        assertThat(context)
+                .containsExactly(OWNER, task.getJobId().toString(), snippetId.toString());
+        assertThat(MDC.get(UserContextFilter.USER)).isNull();
+        assertThat(MDC.get(SnippetReprocessor.JOB_ID)).isNull();
+        assertThat(MDC.get(SnippetReprocessor.SNIPPET_ID)).isNull();
     }
 
     private void givenTask(ReprocessType type) {
