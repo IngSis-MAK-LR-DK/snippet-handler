@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
+import edu.austral.ingsis.snippethandler.observability.UserMdcFilter;
 import edu.austral.ingsis.snippethandler.snippet.LintReport;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
 import edu.austral.ingsis.snippethandler.snippet.SnippetContents;
@@ -15,6 +16,7 @@ import edu.austral.ingsis.snippethandler.snippet.SnippetStyle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,6 +29,8 @@ import org.springframework.stereotype.Component;
 public class SnippetReprocessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnippetReprocessor.class);
+    static final String JOB_ID = "jobId";
+    static final String SNIPPET_ID = "snippetId";
 
     private final ReprocessTaskRepository tasks;
     private final ReprocessJobRepository jobs;
@@ -64,6 +68,20 @@ public class SnippetReprocessor {
         }
         ReprocessTask task = found.get();
         ReprocessJob job = jobs.findById(task.getJobId()).orElseThrow();
+        // The owner of the job stands for the user: its lines are found like the ones of a request.
+        MDC.put(UserMdcFilter.MDC_KEY, job.getUserId());
+        MDC.put(JOB_ID, job.getId().toString());
+        MDC.put(SNIPPET_ID, task.getSnippetId().toString());
+        try {
+            handle(task, job);
+        } finally {
+            MDC.remove(UserMdcFilter.MDC_KEY);
+            MDC.remove(JOB_ID);
+            MDC.remove(SNIPPET_ID);
+        }
+    }
+
+    private void handle(ReprocessTask task, ReprocessJob job) {
         if (task.getAttempts() >= maxAttempts) {
             // Earlier attempts never reported back (the process died): give up on this snippet.
             giveUp(task, job, "no result after " + task.getAttempts() + " attempts");

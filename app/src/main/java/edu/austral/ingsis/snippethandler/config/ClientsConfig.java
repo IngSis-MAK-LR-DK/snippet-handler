@@ -10,10 +10,13 @@ import java.util.Set;
 import edu.austral.ingsis.snippethandler.asset.AssetStore;
 import edu.austral.ingsis.snippethandler.asset.HttpAssetStore;
 import edu.austral.ingsis.snippethandler.auth0.Auth0ClientCredentialsToken;
+import edu.austral.ingsis.snippethandler.auth0.Auth0TokenException;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.http.HttpLanguageService;
 import edu.austral.ingsis.snippethandler.language.http.WebSocketStreamRunner;
+import edu.austral.ingsis.snippethandler.observability.OutboundCallLogging;
+import edu.austral.ingsis.snippethandler.observability.RequestIdForwarding;
 import edu.austral.ingsis.snippethandler.permission.HttpPermissionService;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.security.BearerTokenForwardingInterceptor;
@@ -24,6 +27,7 @@ import edu.austral.ingsis.snippethandler.users.UserDirectory;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.web.client.RestClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -37,6 +41,19 @@ public class ClientsConfig {
     private static final Logger LOG = LoggerFactory.getLogger(ClientsConfig.class);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration SLOW_CALL = Duration.ofSeconds(1);
+
+    /**
+     * Applied to the builder every client below is cloned from, so all of them get it: adapters,
+     * assets, both permission clients and Auth0. The request id is an opaque random value, so
+     * sending it to Auth0 too is harmless.
+     */
+    @Bean
+    public RestClientCustomizer outboundCallLogging() {
+        return builder ->
+                builder.requestInterceptor(new RequestIdForwarding())
+                        .requestInterceptor(new OutboundCallLogging(SLOW_CALL));
+    }
 
     /**
      * Adapters get the user's token, or the handler's own one in background work (US 16 tests,
@@ -97,7 +114,15 @@ public class ClientsConfig {
                         config.clientSecret(),
                         config.audience(),
                         Clock.systemUTC());
-        return token::get;
+        return () -> {
+            try {
+                return token.get();
+            } catch (Auth0TokenException e) {
+                // Without this token no snippet can be created: say why right where it fails.
+                LOG.warn("Could not get the service token: {}", e.getMessage());
+                throw e;
+            }
+        };
     }
 
     @Bean
