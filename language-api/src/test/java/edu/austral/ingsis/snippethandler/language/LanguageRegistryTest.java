@@ -78,5 +78,10 @@ class LanguageRegistryTest {
         public List<RuleDefinition> defaultRules(RuleType type) {
             return List.of();
         }
+
+        @Override
+        public RunningSnippet stream(StreamRequest request, StreamListener listener) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

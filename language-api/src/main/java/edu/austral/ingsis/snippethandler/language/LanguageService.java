@@ -10,7 +10,12 @@ import java.util.Set;
  * tests only needs a {@link SnippetRunner}).
  */
 public interface LanguageService
-        extends SnippetValidator, SnippetLinter, SnippetFormatter, SnippetRunner, RuleCatalog {
+        extends SnippetValidator,
+                SnippetLinter,
+                SnippetFormatter,
+                SnippetRunner,
+                SnippetStreamRunner,
+                RuleCatalog {
 
     /** Language identifier, e.g. {@code printscript}. */
     String language();

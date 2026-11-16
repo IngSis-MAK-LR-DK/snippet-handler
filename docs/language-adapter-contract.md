@@ -55,6 +55,34 @@ líneas impresas con `println`, en orden.
 { "outputs": ["Hello Alice"], "errors": [] }
 ```
 
+## `WS /execute/stream` (US 9 y 10)
+
+La misma ejecucion que `POST /execute`, pero en streaming por WebSocket: cada `println` llega
+apenas se ejecuta y, si el snippet pide un input que no vino, se le pide al cliente y el programa
+espera. El handshake lleva el mismo `Authorization: Bearer` que el resto.
+
+Un mensaje JSON por frame de texto. El cliente empieza con:
+
+```json
+{ "type": "start", "content": "...", "version": "1.1", "inputs": ["Alice"], "interactive": true }
+```
+
+- `inputs` se usan primero, en orden. Cuando se acaban: con `interactive: false` la ejecucion
+  falla (como `POST /execute`); con `true` el adaptador pide el siguiente.
+
+| Del adaptador | Significa |
+|---|---|
+| `{"type":"output","line":"Hello Alice"}` | el snippet imprimio una linea |
+| `{"type":"input","prompt":"Name:"}` | el snippet espera un input |
+| `{"type":"done","errors":[]}` | termino (vacio si anduvo); despues el adaptador cierra |
+
+| Del cliente | Significa |
+|---|---|
+| `{"type":"input","value":"Alice"}` | respuesta al ultimo `input` |
+
+Si el input no llega en 5 minutos, o se corta la conexion, la ejecucion termina. Un mensaje
+invalido cierra con 1008.
+
 ## `GET /rules?type=LINT|FORMAT`
 Reglas predeterminadas del lenguaje.
 

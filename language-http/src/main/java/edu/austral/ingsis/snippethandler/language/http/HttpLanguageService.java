@@ -10,6 +10,10 @@ import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.RuleConfig;
 import edu.austral.ingsis.snippethandler.language.RuleDefinition;
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.language.RunningSnippet;
+import edu.austral.ingsis.snippethandler.language.SnippetStreamRunner;
+import edu.austral.ingsis.snippethandler.language.StreamListener;
+import edu.austral.ingsis.snippethandler.language.StreamRequest;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.language.Violation;
 import edu.austral.ingsis.snippethandler.language.http.AdapterMessages.ExecuteRequest;
@@ -30,16 +34,41 @@ public class HttpLanguageService implements LanguageService {
     private final Set<String> versions;
     private final String fileExtension;
     private final RestClient client;
+    private final SnippetStreamRunner streams;
 
     /**
+     * Without streamed runs: {@link #stream} fails.
+     *
      * @param client a {@link RestClient} whose base URL points to the language adapter
      */
     public HttpLanguageService(
             String language, Set<String> versions, String fileExtension, RestClient client) {
+        this(
+                language,
+                versions,
+                fileExtension,
+                client,
+                (request, listener) -> {
+                    throw new LanguageServiceException(
+                            "%s adapter has no streamed runs configured".formatted(language), null);
+                });
+    }
+
+    /**
+     * @param client a {@link RestClient} whose base URL points to the language adapter
+     * @param streams streamed runs against the same adapter (see {@link WebSocketStreamRunner})
+     */
+    public HttpLanguageService(
+            String language,
+            Set<String> versions,
+            String fileExtension,
+            RestClient client,
+            SnippetStreamRunner streams) {
         this.language = language;
         this.versions = Set.copyOf(versions);
         this.fileExtension = fileExtension;
         this.client = client;
+        this.streams = streams;
     }
 
     @Override
@@ -93,6 +122,11 @@ public class HttpLanguageService implements LanguageService {
                 () ->
                         post("/execute", new ExecuteRequest(source, version, inputs))
                                 .body(ExecutionResult.class));
+    }
+
+    @Override
+    public RunningSnippet stream(StreamRequest request, StreamListener listener) {
+        return streams.stream(request, listener);
     }
 
     @Override

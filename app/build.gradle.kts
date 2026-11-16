@@ -13,6 +13,8 @@ dependencies {
     implementation(project(":auth0-management-client"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
+    // US 9 y 10: ejecucion en streaming con el WebSocket de Spring (mismo Tomcat).
+    implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")

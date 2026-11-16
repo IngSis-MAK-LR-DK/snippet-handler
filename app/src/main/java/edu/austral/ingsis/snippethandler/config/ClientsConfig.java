@@ -3,6 +3,7 @@ package edu.austral.ingsis.snippethandler.config;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -12,6 +13,7 @@ import edu.austral.ingsis.snippethandler.auth0.Auth0ClientCredentialsToken;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.http.HttpLanguageService;
+import edu.austral.ingsis.snippethandler.language.http.WebSocketStreamRunner;
 import edu.austral.ingsis.snippethandler.permission.HttpPermissionService;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.security.BearerTokenForwardingInterceptor;
@@ -47,21 +49,28 @@ public class ClientsConfig {
             RestClient.Builder builder) {
         BearerTokenForwardingInterceptor tokens =
                 new BearerTokenForwardingInterceptor(serviceToken::token);
-        List<LanguageService> services =
-                properties.languages().entrySet().stream()
-                        .map(
-                                entry ->
-                                        (LanguageService)
-                                                new HttpLanguageService(
-                                                        entry.getKey(),
-                                                        Set.copyOf(entry.getValue().versions()),
-                                                        entry.getValue().fileExtension(),
-                                                        builder.clone()
-                                                                .baseUrl(entry.getValue().url())
-                                                                .requestFactory(requestFactory())
-                                                                .requestInterceptor(tokens)
-                                                                .build()))
-                        .toList();
+        // Streamed runs (US 9 and 10) use the WebSocket client of the JDK.
+        HttpClient streamClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+        List<LanguageService> services = new ArrayList<>();
+        properties
+                .languages()
+                .forEach(
+                        (name, language) ->
+                                services.add(
+                                        new HttpLanguageService(
+                                                name,
+                                                Set.copyOf(language.versions()),
+                                                language.fileExtension(),
+                                                builder.clone()
+                                                        .baseUrl(language.url())
+                                                        .requestFactory(requestFactory())
+                                                        .requestInterceptor(tokens)
+                                                        .build(),
+                                                new WebSocketStreamRunner(
+                                                        name,
+                                                        WebSocketStreamRunner.streamUriOf(
+                                                                language.url()),
+                                                        streamClient))));
         return new LanguageRegistry(services);
     }
 
