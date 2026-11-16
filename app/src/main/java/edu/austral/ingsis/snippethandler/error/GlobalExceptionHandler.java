@@ -1,6 +1,7 @@
 package edu.austral.ingsis.snippethandler.error;
 
 import edu.austral.ingsis.snippethandler.asset.AssetStoreException;
+import edu.austral.ingsis.snippethandler.auth0.Auth0TokenException;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.UnsupportedLanguageException;
 import edu.austral.ingsis.snippethandler.permission.PermissionDeniedException;
@@ -14,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /** Maps every error to an RFC 7807 problem detail. */
@@ -31,7 +33,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(UserDirectoryException.class)
     public ProblemDetail userDirectory(UserDirectoryException e) {
+        // Not the stack trace: an I/O error repeats the URL, whose query is what the user typed
+        // to search (part of an email).
+        LOG.warn("User directory failure: {} cause={}", e.getMessage(), describe(e.getCause()));
         return problem(HttpStatus.BAD_GATEWAY, e);
+    }
+
+    private static String describe(Throwable cause) {
+        if (cause instanceof Auth0TokenException) {
+            return cause.getMessage();
+        }
+        if (cause instanceof RestClientResponseException response) {
+            return "status=" + response.getStatusCode().value();
+        }
+        return cause == null ? "none" : cause.getClass().getSimpleName();
     }
 
     @ExceptionHandler(NotFoundException.class)

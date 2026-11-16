@@ -50,6 +50,11 @@ snippet:
     max-attempts: 3
     claim-idle: 30s
     poll-interval: 500ms
+  # Cada cuanto se reporta a New Relic el estado de las colas de Redis y la cantidad de snippets
+  # (eventos ReprocessQueue y SnippetInventory). Sin el agente no va a ningun lado.
+  observability:
+    enabled: true
+    report-interval: 60s
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   asset:
@@ -74,3 +79,10 @@ snippet:
       url: ${PRINTSCRIPT_SERVICE_URL:http://localhost:8083}
       versions: ["1.0", "1.1"]
       file-extension: ps
+
+# Formato de los logs en la consola. Local: texto legible, con el requestId y el contexto de cada
+# evento (%kvp). En el stack se prende JSON con LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs (el contexto
+# pasa a ser campos que se filtran: requestId, userId, snippetId...).
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%X{requestId:-}] %logger{36} : %m %kvp%n"

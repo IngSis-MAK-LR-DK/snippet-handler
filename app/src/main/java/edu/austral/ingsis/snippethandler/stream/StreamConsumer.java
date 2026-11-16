@@ -5,8 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import edu.austral.ingsis.snippethandler.observability.RequestIdFilter;
+
+import com.newrelic.api.agent.Trace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -31,6 +35,8 @@ public class StreamConsumer implements SmartLifecycle {
     private static final Logger LOG = LoggerFactory.getLogger(StreamConsumer.class);
     private static final int BATCH = 50;
     private static final Duration RETRY_BACKOFF = Duration.ofSeconds(5);
+    static final String STREAM = "stream";
+    static final String MESSAGE_ID = "messageId";
 
     private final StringRedisTemplate redis;
     private final String stream;
@@ -39,6 +45,7 @@ public class StreamConsumer implements SmartLifecycle {
     private final Duration claimIdle;
     private final Duration pollInterval;
     private final StreamMessageHandler handler;
+    private final MessageTracing tracing;
 
     private volatile boolean running;
     private volatile boolean groupReady;
@@ -52,6 +59,19 @@ public class StreamConsumer implements SmartLifecycle {
             Duration claimIdle,
             Duration pollInterval,
             StreamMessageHandler handler) {
+        this(redis, stream, group, name, claimIdle, pollInterval, handler, MessageTracing.NONE);
+    }
+
+    public StreamConsumer(
+            StringRedisTemplate redis,
+            String stream,
+            String group,
+            String name,
+            Duration claimIdle,
+            Duration pollInterval,
+            StreamMessageHandler handler,
+            MessageTracing tracing) {
+        this.tracing = tracing;
         this.redis = redis;
         this.stream = stream;
         this.group = group;
@@ -82,7 +102,29 @@ public class StreamConsumer implements SmartLifecycle {
         return seen;
     }
 
-    private int process(MapRecord<String, String, String> record) {
+    // Each message is a transaction of its own for the agent (there is no HTTP request to hang it
+    // from), continuing the trace of whoever published it.
+    @Trace(dispatcher = true)
+    int process(MapRecord<String, String, String> record) {
+        tracing.handling(stream, record.getValue());
+        // No request here: the context of the log lines is the message being handled.
+        MDC.put(STREAM, stream);
+        MDC.put(MESSAGE_ID, record.getId().getValue());
+        // The request that published it, if any: its id finds this work along with the request.
+        String requestId = record.getValue().get(StreamPublisher.REQUEST_ID);
+        if (requestId != null) {
+            MDC.put(RequestIdFilter.MDC_KEY, requestId);
+        }
+        try {
+            return handle(record);
+        } finally {
+            MDC.remove(STREAM);
+            MDC.remove(MESSAGE_ID);
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
+    }
+
+    private int handle(MapRecord<String, String, String> record) {
         Map<String, String> fields = record.getValue();
         try {
             handler.handle(fields);

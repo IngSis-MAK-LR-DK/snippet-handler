@@ -2,6 +2,7 @@ package edu.austral.ingsis.snippethandler.reprocessing;
 
 import java.util.UUID;
 
+import edu.austral.ingsis.snippethandler.stream.MessageTracing;
 import edu.austral.ingsis.snippethandler.stream.StreamConsumer;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,6 +19,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 public class ReprocessingConfig {
 
     private final String consumerName = "handler-" + UUID.randomUUID();
+    private final MessageTracing tracing;
+
+    public ReprocessingConfig(MessageTracing tracing) {
+        this.tracing = tracing;
+    }
 
     @Bean
     StreamConsumer requestsConsumer(
@@ -47,6 +53,7 @@ public class ReprocessingConfig {
                 consumerName,
                 properties.claimIdle(),
                 properties.pollInterval(),
-                handler);
+                handler,
+                tracing);
     }
 }

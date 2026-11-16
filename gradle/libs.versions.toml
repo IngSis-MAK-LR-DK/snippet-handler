@@ -1,10 +1,13 @@
 [versions]
 spring-boot = "3.5.16"
 wiremock = "3.13.2"
+# La misma version que el agente del Dockerfile: la API es la que el agente implementa.
+newrelic = "9.5.0"
 
 [libraries]
 spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+newrelic-api = { module = "com.newrelic.agent.java:newrelic-api", version.ref = "newrelic" }
 
 [plugins]
 cikit-java = { id = "edu.austral.ingsis.java-conventions", version = "1.0.0" }
