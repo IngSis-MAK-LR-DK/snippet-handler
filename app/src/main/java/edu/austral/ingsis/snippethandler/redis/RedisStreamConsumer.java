@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -26,9 +26,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * processing resume after a crash and retry after a failure. Entries are deleted once they are
  * acknowledged, so a stream must be read by one group only.
  */
-public class StreamConsumer implements SmartLifecycle {
+public class RedisStreamConsumer implements SmartLifecycle {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StreamConsumer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RedisStreamConsumer.class);
     private static final int BATCH = 50;
     private static final Duration RETRY_BACKOFF = Duration.ofSeconds(5);
 
@@ -44,7 +44,7 @@ public class StreamConsumer implements SmartLifecycle {
     private volatile boolean groupReady;
     private Thread thread;
 
-    public StreamConsumer(
+    public RedisStreamConsumer(
             StringRedisTemplate redis,
             String stream,
             String group,

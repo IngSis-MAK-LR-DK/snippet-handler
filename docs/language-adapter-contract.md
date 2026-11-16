@@ -91,4 +91,13 @@ Reglas predeterminadas del lenguaje.
    "enabledByDefault": true, "defaultValue": "4" }]
 ```
 
+## `GET /version` (público)
+Versión del motor del lenguaje que trae el adaptador. El handler la consulta cada minuto y, cuando
+cambia (se desplegó un adaptador nuevo), revalida todos los snippets del lenguaje contra su versión
+más nueva. No hace falta disparar nada a mano.
+
+```json
+{ "version": "1.1.2" }
+```
+
 Cualquier respuesta 4xx/5xx o un body vacío se reporta al cliente del handler como `502`.

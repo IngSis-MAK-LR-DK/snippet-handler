@@ -32,14 +32,6 @@ public class ReprocessingService {
                 .orElseThrow(() -> notFound(id));
     }
 
-    /** A revalidation by language version, which does not belong to any one user. */
-    public ReprocessingView findRevalidation(UUID id) {
-        return jobs.findById(id)
-                .filter(job -> job.getType() == ReprocessType.REVALIDATE)
-                .map(this::view)
-                .orElseThrow(() -> notFound(id));
-    }
-
     public ReprocessingView view(ReprocessJob job) {
         long done = 0;
         long failed = 0;

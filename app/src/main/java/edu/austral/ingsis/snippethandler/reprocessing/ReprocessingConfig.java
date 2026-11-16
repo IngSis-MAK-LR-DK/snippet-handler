@@ -2,7 +2,7 @@ package edu.austral.ingsis.snippethandler.reprocessing;
 
 import java.util.UUID;
 
-import edu.austral.ingsis.snippethandler.stream.StreamConsumer;
+import edu.austral.ingsis.snippethandler.redis.RedisStreamConsumer;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -20,7 +20,7 @@ public class ReprocessingConfig {
     private final String consumerName = "handler-" + UUID.randomUUID();
 
     @Bean
-    StreamConsumer requestsConsumer(
+    RedisStreamConsumer requestsConsumer(
             StringRedisTemplate redis,
             ReprocessingFanOut fanOut,
             ReprocessingProperties properties) {
@@ -28,19 +28,19 @@ public class ReprocessingConfig {
     }
 
     @Bean
-    StreamConsumer snippetReprocessConsumer(
+    RedisStreamConsumer snippetReprocessConsumer(
             StringRedisTemplate redis,
             SnippetReprocessor reprocessor,
             ReprocessingProperties properties) {
         return consumer(redis, Streams.SNIPPET_REPROCESS, properties, reprocessor::handle);
     }
 
-    private StreamConsumer consumer(
+    private RedisStreamConsumer consumer(
             StringRedisTemplate redis,
             String stream,
             ReprocessingProperties properties,
-            edu.austral.ingsis.snippethandler.stream.StreamMessageHandler handler) {
-        return new StreamConsumer(
+            edu.austral.ingsis.snippethandler.redis.StreamMessageHandler handler) {
+        return new RedisStreamConsumer(
                 redis,
                 stream,
                 Streams.GROUP,

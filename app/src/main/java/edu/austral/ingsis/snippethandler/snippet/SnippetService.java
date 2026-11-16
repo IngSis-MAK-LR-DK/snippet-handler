@@ -5,7 +5,6 @@ import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
 import edu.austral.ingsis.snippethandler.error.InvalidSnippetException;
-import edu.austral.ingsis.snippethandler.events.SnippetEventPublisher;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.SnippetValidator;
@@ -13,6 +12,7 @@ import edu.austral.ingsis.snippethandler.language.ValidationResult;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.permission.Role;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,7 +29,7 @@ public class SnippetService {
     private final SnippetStyle style;
     private final LanguageRegistry languages;
     private final PermissionService permissions;
-    private final SnippetEventPublisher events;
+    private final ApplicationEventPublisher events;
 
     public SnippetService(
             SnippetStore store,
@@ -38,7 +38,7 @@ public class SnippetService {
             SnippetStyle style,
             LanguageRegistry languages,
             PermissionService permissions,
-            SnippetEventPublisher events) {
+            ApplicationEventPublisher events) {
         this.store = store;
         this.access = access;
         this.contents = contents;
@@ -102,7 +102,7 @@ public class SnippetService {
                         s -> {
                             // US 16: published within the transaction, delivered after commit.
                             if (sourceChanged) {
-                                events.snippetUpdated(id);
+                                events.publishEvent(new SnippetUpdated(id));
                             }
                         });
         return SnippetDetail.of(saved, content);

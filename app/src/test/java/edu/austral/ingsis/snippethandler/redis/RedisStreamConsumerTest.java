@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,7 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Against a real Redis: delivery, acknowledgement, retry of failures and resuming after a crash.
  */
 @Testcontainers
-class StreamConsumerTest {
+class RedisStreamConsumerTest {
 
     @Container
     static final GenericContainer<?> REDIS =
@@ -32,7 +32,7 @@ class StreamConsumerTest {
 
     private static LettuceConnectionFactory factory;
     private static StringRedisTemplate redis;
-    private static StreamPublisher publisher;
+    private static RedisStreamPublisher publisher;
 
     @BeforeAll
     static void connect() {
@@ -43,7 +43,7 @@ class StreamConsumerTest {
         factory.afterPropertiesSet();
         redis = new StringRedisTemplate(factory);
         redis.afterPropertiesSet();
-        publisher = new StreamPublisher(redis);
+        publisher = new RedisStreamPublisher(redis);
     }
 
     @AfterAll
@@ -55,7 +55,7 @@ class StreamConsumerTest {
     void deliversAndAcknowledgesEveryMessage() {
         String stream = stream();
         List<String> seen = new ArrayList<>();
-        StreamConsumer consumer = collecting(stream, "a", Duration.ofMillis(50), seen::add);
+        RedisStreamConsumer consumer = collecting(stream, "a", Duration.ofMillis(50), seen::add);
         publisher.publish(stream, Map.of("n", "1"));
         publisher.publish(stream, Map.of("n", "2"));
 
@@ -76,7 +76,7 @@ class StreamConsumerTest {
     @Test
     void acknowledgedMessagesAreRemovedFromTheStreamButPendingOnesStay() {
         String stream = stream();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
@@ -99,7 +99,7 @@ class StreamConsumerTest {
     void aFailedMessageIsDeliveredAgainAfterTheClaimTime() throws InterruptedException {
         String stream = stream();
         List<String> attempts = new ArrayList<>();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
@@ -123,7 +123,7 @@ class StreamConsumerTest {
     @Test
     void anotherConsumerResumesWhatADeadOneLeftUnacknowledged() throws InterruptedException {
         String stream = stream();
-        StreamConsumer dead =
+        RedisStreamConsumer dead =
                 consumer(
                         stream,
                         "dead",
@@ -135,7 +135,8 @@ class StreamConsumerTest {
         dead.pollOnce();
 
         List<String> seen = new ArrayList<>();
-        StreamConsumer survivor = collecting(stream, "survivor", Duration.ofMillis(100), seen::add);
+        RedisStreamConsumer survivor =
+                collecting(stream, "survivor", Duration.ofMillis(100), seen::add);
         assertThat(survivor.pollOnce()).isZero(); // too soon to take it over
         Thread.sleep(150);
         survivor.pollOnce();
@@ -147,7 +148,7 @@ class StreamConsumerTest {
     void theBackgroundLoopKeepsConsumingUntilStopped() {
         String stream = stream();
         List<String> seen = new CopyOnWriteArrayList<>();
-        StreamConsumer consumer = collecting(stream, "loop", Duration.ofMillis(50), seen::add);
+        RedisStreamConsumer consumer = collecting(stream, "loop", Duration.ofMillis(50), seen::add);
 
         consumer.start();
         try {
@@ -160,7 +161,7 @@ class StreamConsumerTest {
         assertThat(consumer.isRunning()).isFalse();
     }
 
-    private static StreamConsumer collecting(
+    private static RedisStreamConsumer collecting(
             String stream,
             String name,
             Duration claimIdle,
@@ -168,9 +169,9 @@ class StreamConsumerTest {
         return consumer(stream, name, claimIdle, fields -> onN.accept(fields.get("n")));
     }
 
-    private static StreamConsumer consumer(
+    private static RedisStreamConsumer consumer(
             String stream, String name, Duration claimIdle, StreamMessageHandler handler) {
-        return new StreamConsumer(
+        return new RedisStreamConsumer(
                 redis, stream, "g", name, claimIdle, Duration.ofMillis(20), handler);
     }
 

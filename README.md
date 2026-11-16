@@ -37,20 +37,16 @@ Los errores siguen RFC 7807; un snippet inválido devuelve `422` con
 | `DELETE /snippets/{id}` | |
 | `POST /snippets/{id}/share` `{"userId": "..."}` | 7 |
 | `GET\|POST /snippets/{id}/tests`, `PUT\|DELETE /snippets/{id}/tests/{testId}` | 8 |
-| `POST /snippets/{id}/tests/{testId}/run` | 6, 9 |
+| `WS /snippets/{id}/run`: ejecución interactiva y de tests en streaming ([protocolo](docs/streaming-execution.md)) | 6, 9, 10 |
 | `GET\|PUT /rules/format`, `GET\|PUT /rules/lint` (`?language=` opcional) | 11, 14 |
 | `POST /snippets/{id}/format` | 11 |
 | `GET /snippets/{id}/download?formatted=true\|false` | 13 |
 | `GET /languages` | |
 | `POST /snippets/format` `{language, version, content}` (formatea sin guardar) | 3, 4 |
-| `POST /snippets/{id}/tests/preview` (corre un test sin guardarlo) | 8, 9 |
 | `GET /users?query=&page=&size=` (busca en Auth0, excluye al caller) | 7 |
-| `POST /languages/{lang}/versions/{version}/revalidate` (202, en background) | 5 |
-| `GET /languages/revalidations/{id}` (progreso de la revalidación) | 5 |
 | `GET /rules/reprocessing`, `GET /rules/reprocessing/{id}` (progreso del reproceso al cambiar reglas) | 12, 15 |
 
-Al actualizar un snippet sus tests se corren en segundo plano (US 16). US 9 (streaming) y 10
-quedan para cuando se vean en la cursada.
+Al actualizar un snippet sus tests se corren en segundo plano (US 16).
 
 ### Procesamiento en segundo plano (US 12, 15 y revalidación)
 

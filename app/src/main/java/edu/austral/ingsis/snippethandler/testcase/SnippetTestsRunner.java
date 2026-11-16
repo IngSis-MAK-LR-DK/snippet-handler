@@ -1,17 +1,18 @@
 package edu.austral.ingsis.snippethandler.testcase;
 
-import java.util.UUID;
+import edu.austral.ingsis.snippethandler.snippet.SnippetUpdated;
 
-import edu.austral.ingsis.snippethandler.events.SnippetUpdateHandler;
-
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * US 16: when a snippet changes, every one of its tests runs again in the background. The update
- * itself never depends on the outcome.
+ * US 16: when a snippet changes, every one of its tests runs again in the background, once the
+ * update is committed. The update itself never depends on the outcome.
  */
 @Component
-public class SnippetTestsRunner implements SnippetUpdateHandler {
+public class SnippetTestsRunner {
 
     private final TestCaseService tests;
 
@@ -19,8 +20,9 @@ public class SnippetTestsRunner implements SnippetUpdateHandler {
         this.tests = tests;
     }
 
-    @Override
-    public void onSnippetUpdated(UUID snippetId) {
-        tests.runAll(snippetId);
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onSnippetUpdated(SnippetUpdated event) {
+        tests.runAll(event.snippetId());
     }
 }

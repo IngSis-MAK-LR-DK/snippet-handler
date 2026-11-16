@@ -1,6 +1,6 @@
 package edu.austral.ingsis.snippethandler.reprocessing;
 
-import edu.austral.ingsis.snippethandler.stream.StreamPublisher;
+import edu.austral.ingsis.snippethandler.redis.RedisStreamPublisher;
 
 import org.springframework.stereotype.Component;
 
@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class RedisReprocessPublisher implements ReprocessPublisher {
 
-    private final StreamPublisher streams;
+    private final RedisStreamPublisher streams;
 
-    public RedisReprocessPublisher(StreamPublisher streams) {
+    public RedisReprocessPublisher(RedisStreamPublisher streams) {
         this.streams = streams;
     }
 

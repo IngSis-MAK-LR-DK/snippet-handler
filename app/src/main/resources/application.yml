@@ -44,6 +44,10 @@ management:
 
 snippet:
   default-language: printscript
+  # Cada cuanto se pregunta a los adaptadores la version de su motor (GET /version). Si cambio
+  # (se desplego un adaptador nuevo), se revalidan todos los snippets de ese lenguaje.
+  revalidation:
+    check-interval: 1m
   # US 12 y 15: reproceso en segundo plano de los snippets cuando cambian las reglas.
   reprocessing:
     enabled: true

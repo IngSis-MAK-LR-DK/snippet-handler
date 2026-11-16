@@ -18,8 +18,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Tests of a snippet (US 8), running them (US 6/9) and re-running them on change (US 16). Every
- * operation is a single write, so none needs a transaction around its calls to other services.
+ * Tests of a snippet (US 8) and re-running them on change (US 16). Running one on demand is
+ * streamed (execution.SnippetExecutionService). Every operation is a single write, so none needs a
+ * transaction around its calls to other services.
  */
 @Service
 public class TestCaseService {
@@ -59,20 +60,14 @@ public class TestCaseService {
 
     public TestCaseView update(UUID snippetId, UUID testId, TestCaseRequest request) {
         access.require(snippetId, Role.OWNER);
-        TestCase test = find(snippetId, testId);
+        TestCase test = findTest(snippetId, testId);
         test.redefine(request.name(), request.inputs(), request.expectedOutputs());
         return TestCaseView.of(repository.save(test));
     }
 
     public void delete(UUID snippetId, UUID testId) {
         access.require(snippetId, Role.OWNER);
-        repository.delete(find(snippetId, testId));
-    }
-
-    /** Anyone who can read the snippet can run its tests. */
-    public TestRunResult run(UUID snippetId, UUID testId) {
-        Snippet snippet = access.require(snippetId, Role.READER);
-        return run(snippet, contents.read(snippetId), find(snippetId, testId));
+        repository.delete(findTest(snippetId, testId));
     }
 
     /** Runs every test of a snippet, recording each outcome. Internal: no permission check. */
@@ -82,17 +77,6 @@ public class TestCaseService {
         return repository.findAllBySnippetIdOrderByCreatedAtAsc(snippetId).stream()
                 .map(test -> run(snippet, content, test))
                 .toList();
-    }
-
-    /** Runs a test that is not saved yet (the editor's draft). Nothing is stored. */
-    public TestRunResult preview(UUID snippetId, TestCaseRequest request) {
-        Snippet snippet = access.require(snippetId, Role.READER);
-        return evaluate(
-                snippet,
-                contents.read(snippetId),
-                null,
-                request.inputs(),
-                request.expectedOutputs());
     }
 
     private TestRunResult run(Snippet snippet, String content, TestCase test) {
@@ -137,24 +121,20 @@ public class TestCaseService {
                 : TestStatus.FAILED;
     }
 
-    /**
-     * A saved test of the snippet. No permission check: the caller already checked it can read the
-     * snippet.
-     *
-     * @throws NotFoundException if the snippet has no such test
-     */
-    public TestCase test(UUID snippetId, UUID testId) {
-        return find(snippetId, testId);
-    }
-
     /** Records the outcome of running a saved test outside this service (a streamed run). */
     public void recordRun(UUID snippetId, UUID testId, TestStatus status) {
-        TestCase test = find(snippetId, testId);
+        TestCase test = findTest(snippetId, testId);
         test.ran(status);
         repository.save(test);
     }
 
-    private TestCase find(UUID snippetId, UUID testId) {
+    /**
+     * A saved test of the snippet. No permission check: callers check first that the user can read
+     * the snippet.
+     *
+     * @throws NotFoundException if the snippet has no such test
+     */
+    public TestCase findTest(UUID snippetId, UUID testId) {
         return repository
                 .findByIdAndSnippetId(testId, snippetId)
                 .orElseThrow(
