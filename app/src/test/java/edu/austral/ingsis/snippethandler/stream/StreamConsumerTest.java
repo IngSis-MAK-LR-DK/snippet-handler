@@ -44,7 +44,7 @@ class StreamConsumerTest {
         factory.afterPropertiesSet();
         redis = new StringRedisTemplate(factory);
         redis.afterPropertiesSet();
-        publisher = new StreamPublisher(redis);
+        publisher = new StreamPublisher(redis, MessageTracing.NONE);
     }
 
     @AfterAll
@@ -183,6 +183,57 @@ class StreamConsumerTest {
         assertThat(context.get(1)).matches("\\d+-\\d+"); // a Redis entry id
         assertThat(MDC.get(StreamConsumer.STREAM)).isNull();
         assertThat(MDC.get(StreamConsumer.MESSAGE_ID)).isNull();
+    }
+
+    @Test
+    void theTraceOfThePublisherTravelsWithTheMessageToItsHandler() {
+        String stream = stream();
+        MessageTracing publishing =
+                new MessageTracing() {
+                    @Override
+                    public Map<String, String> outgoing() {
+                        return Map.of(PREFIX + "traceparent", "00-abc");
+                    }
+
+                    @Override
+                    public void handling(String s, Map<String, String> fields) {}
+                };
+        List<Map<String, String>> continued = new ArrayList<>();
+        MessageTracing handling =
+                new MessageTracing() {
+                    @Override
+                    public Map<String, String> outgoing() {
+                        return Map.of();
+                    }
+
+                    @Override
+                    public void handling(String s, Map<String, String> fields) {
+                        continued.add(fields);
+                    }
+                };
+        List<String> seen = new ArrayList<>();
+        StreamConsumer consumer =
+                new StreamConsumer(
+                        redis,
+                        stream,
+                        "g",
+                        "a",
+                        Duration.ofMinutes(5),
+                        Duration.ofMillis(20),
+                        fields -> seen.add(fields.get("n")),
+                        handling);
+        new StreamPublisher(redis, publishing).publish(stream, Map.of("n", "1"));
+
+        consumer.pollOnce();
+
+        assertThat(seen).containsExactly("1");
+        assertThat(continued)
+                .singleElement()
+                .satisfies(
+                        fields ->
+                                assertThat(fields)
+                                        .containsEntry("n", "1")
+                                        .containsEntry("trace.traceparent", "00-abc"));
     }
 
     private static StreamConsumer collecting(

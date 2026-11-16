@@ -50,6 +50,11 @@ snippet:
     max-attempts: 3
     claim-idle: 30s
     poll-interval: 500ms
+  # Cada cuanto se reporta a New Relic el estado de las colas de Redis y la cantidad de snippets
+  # (eventos ReprocessQueue y SnippetInventory). Sin el agente no va a ningun lado.
+  observability:
+    enabled: true
+    report-interval: 60s
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
   asset:
