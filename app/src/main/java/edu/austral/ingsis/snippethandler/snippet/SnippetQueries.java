@@ -59,11 +59,11 @@ public class SnippetQueries {
                                 .map(SnippetSummary::of);
         // "Listed 0" while permissions knows of some, or permissions knowing of none, tells where
         // the snippets of a user went missing.
-        LOG.info(
-                "snippets listed relation={} accessible={} matching={}",
-                filter.relation(),
-                ids.size(),
-                page.getTotalElements());
+        LOG.atInfo()
+                .addKeyValue("relation", filter.relation())
+                .addKeyValue("accessible", ids.size())
+                .addKeyValue("matching", page.getTotalElements())
+                .log("Snippets listed");
         return page;
     }
 

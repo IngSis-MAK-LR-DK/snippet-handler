@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import ch.qos.logback.classic.Level;
@@ -70,18 +72,23 @@ class OutboundCallLoggingTest {
         assertThat(appender.list).hasSize(1);
         ILoggingEvent event = appender.list.get(0);
         assertThat(event.getLevel()).isEqualTo(Level.WARN);
-        assertThat(event.getFormattedMessage())
-                .isEqualTo("call failed GET tenant.auth0.com/api/v2/users status=503 tookMs=80");
+        assertThat(event.getFormattedMessage()).isEqualTo("Outbound call failed");
+        assertThat(context(event))
+                .containsEntry("method", "GET")
+                .containsEntry("host", "tenant.auth0.com")
+                .containsEntry("path", "/api/v2/users")
+                .containsEntry("status", "503")
+                .containsEntry("tookMs", "80");
     }
 
     @Test
     void aSlowCallIsLoggedEvenIfItSucceeded() throws IOException {
         logging.intercept(request, new byte[0], answering(HttpStatus.OK, Duration.ofMillis(1500)));
 
-        assertThat(appender.list)
-                .singleElement()
-                .extracting(ILoggingEvent::getFormattedMessage)
-                .isEqualTo("slow call GET tenant.auth0.com/api/v2/users status=200 tookMs=1500");
+        ILoggingEvent event = appender.list.get(0);
+        assertThat(appender.list).hasSize(1);
+        assertThat(event.getFormattedMessage()).isEqualTo("Slow outbound call");
+        assertThat(context(event)).containsEntry("status", "200").containsEntry("tookMs", "1500");
     }
 
     @Test
@@ -93,18 +100,26 @@ class OutboundCallLoggingTest {
 
         assertThrows(IOException.class, () -> logging.intercept(request, new byte[0], down));
 
-        assertThat(appender.list)
-                .singleElement()
-                .extracting(ILoggingEvent::getFormattedMessage)
-                .asString()
-                .startsWith("call failed GET tenant.auth0.com/api/v2/users")
-                .contains("Connection refused");
+        assertThat(appender.list).hasSize(1);
+        ILoggingEvent event = appender.list.get(0);
+        assertThat(event.getFormattedMessage()).isEqualTo("Outbound call failed");
+        assertThat(context(event))
+                .containsEntry("path", "/api/v2/users")
+                .hasEntrySatisfying("error", e -> assertThat(e).contains("Connection refused"));
     }
 
     @Test
     void theQueryStringNeverReachesTheLog() throws IOException {
         logging.intercept(request, new byte[0], answering(HttpStatus.BAD_GATEWAY, Duration.ZERO));
 
-        assertThat(appender.list.get(0).getFormattedMessage()).doesNotContain("ana@mail.com");
+        ILoggingEvent event = appender.list.get(0);
+        assertThat(event.getFormattedMessage()).doesNotContain("ana@mail.com");
+        assertThat(context(event).values()).noneMatch(v -> v.contains("ana@mail.com"));
+    }
+
+    private static Map<String, String> context(ILoggingEvent event) {
+        Map<String, String> pairs = new HashMap<>();
+        event.getKeyValuePairs().forEach(kv -> pairs.put(kv.key, String.valueOf(kv.value)));
+        return pairs;
     }
 }

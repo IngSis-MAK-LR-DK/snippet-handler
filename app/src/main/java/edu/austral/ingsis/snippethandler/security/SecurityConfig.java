@@ -5,7 +5,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 import java.util.List;
 
 import edu.austral.ingsis.snippethandler.config.SnippetProperties;
-import edu.austral.ingsis.snippethandler.observability.UserContextFilter;
+import edu.austral.ingsis.snippethandler.observability.UserMdcFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,7 +38,7 @@ public class SecurityConfig {
                                         .anyRequest()
                                         .authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(withDefaults()))
-                .addFilterAfter(new UserContextFilter(), BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(new UserMdcFilter(), BearerTokenAuthenticationFilter.class)
                 .build();
     }
 

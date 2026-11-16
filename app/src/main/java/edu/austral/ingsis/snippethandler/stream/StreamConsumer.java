@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import edu.austral.ingsis.snippethandler.observability.RequestIdFilter;
+
 import com.newrelic.api.agent.Trace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,11 +110,17 @@ public class StreamConsumer implements SmartLifecycle {
         // No request here: the context of the log lines is the message being handled.
         MDC.put(STREAM, stream);
         MDC.put(MESSAGE_ID, record.getId().getValue());
+        // The request that published it, if any: its id finds this work along with the request.
+        String requestId = record.getValue().get(StreamPublisher.REQUEST_ID);
+        if (requestId != null) {
+            MDC.put(RequestIdFilter.MDC_KEY, requestId);
+        }
         try {
             return handle(record);
         } finally {
             MDC.remove(STREAM);
             MDC.remove(MESSAGE_ID);
+            MDC.remove(RequestIdFilter.MDC_KEY);
         }
     }
 

@@ -17,7 +17,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
 import edu.austral.ingsis.snippethandler.language.ValidationResult;
-import edu.austral.ingsis.snippethandler.observability.UserContextFilter;
+import edu.austral.ingsis.snippethandler.observability.UserMdcFilter;
 import edu.austral.ingsis.snippethandler.snippet.Compliance;
 import edu.austral.ingsis.snippethandler.snippet.LintReport;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
@@ -233,7 +233,7 @@ class SnippetReprocessorTest {
         when(style.lintStrict(OWNER, service, "1.0", "let x=1;"))
                 .thenAnswer(
                         invocation -> {
-                            context.add(MDC.get(UserContextFilter.USER));
+                            context.add(MDC.get(UserMdcFilter.MDC_KEY));
                             context.add(MDC.get(SnippetReprocessor.JOB_ID));
                             context.add(MDC.get(SnippetReprocessor.SNIPPET_ID));
                             return LintReport.of(List.of());
@@ -243,7 +243,7 @@ class SnippetReprocessorTest {
 
         assertThat(context)
                 .containsExactly(OWNER, task.getJobId().toString(), snippetId.toString());
-        assertThat(MDC.get(UserContextFilter.USER)).isNull();
+        assertThat(MDC.get(UserMdcFilter.MDC_KEY)).isNull();
         assertThat(MDC.get(SnippetReprocessor.JOB_ID)).isNull();
         assertThat(MDC.get(SnippetReprocessor.SNIPPET_ID)).isNull();
     }

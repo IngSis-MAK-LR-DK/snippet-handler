@@ -6,6 +6,7 @@ import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.spi.LoggingEventBuilder;
 import org.springframework.http.HttpRequest;
 import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -44,35 +45,32 @@ public class OutboundCallLogging implements ClientHttpRequestInterceptor {
         try {
             response = execution.execute(request, body);
         } catch (IOException e) {
-            LOG.warn(
-                    "call failed {} {}{} error={} tookMs={}",
-                    request.getMethod(),
-                    request.getURI().getHost(),
-                    request.getURI().getPath(),
-                    e.toString(),
-                    elapsedMillis(start));
+            describe(LOG.atWarn(), request, elapsedMillis(start))
+                    .addKeyValue("error", e.toString())
+                    .log("Outbound call failed");
             throw e;
         }
         long took = elapsedMillis(start);
         int status = response.getStatusCode().value();
         if (status >= 500) {
-            LOG.warn(
-                    "call failed {} {}{} status={} tookMs={}",
-                    request.getMethod(),
-                    request.getURI().getHost(),
-                    request.getURI().getPath(),
-                    status,
-                    took);
+            describe(LOG.atWarn(), request, took)
+                    .addKeyValue("status", status)
+                    .log("Outbound call failed");
         } else if (took >= slowMillis) {
-            LOG.warn(
-                    "slow call {} {}{} status={} tookMs={}",
-                    request.getMethod(),
-                    request.getURI().getHost(),
-                    request.getURI().getPath(),
-                    status,
-                    took);
+            describe(LOG.atWarn(), request, took)
+                    .addKeyValue("status", status)
+                    .log("Slow outbound call");
         }
         return response;
+    }
+
+    /** Where the call went and how long it took; the path only, never the query string. */
+    private static LoggingEventBuilder describe(
+            LoggingEventBuilder event, HttpRequest request, long tookMs) {
+        return event.addKeyValue("method", request.getMethod())
+                .addKeyValue("host", request.getURI().getHost())
+                .addKeyValue("path", request.getURI().getPath())
+                .addKeyValue("tookMs", tookMs);
     }
 
     private long elapsedMillis(long start) {

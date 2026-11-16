@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import edu.austral.ingsis.snippethandler.observability.RequestIdFilter;
+
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -234,6 +236,29 @@ class StreamConsumerTest {
                                 assertThat(fields)
                                         .containsEntry("n", "1")
                                         .containsEntry("trace.traceparent", "00-abc"));
+    }
+
+    @Test
+    void theWorkOfAMessageCarriesTheRequestIdOfWhoeverPublishedIt() {
+        String stream = stream();
+        List<String> requestIds = new ArrayList<>();
+        StreamConsumer consumer =
+                consumer(
+                        stream,
+                        "a",
+                        Duration.ofMinutes(5),
+                        fields -> requestIds.add(MDC.get(RequestIdFilter.MDC_KEY)));
+        MDC.put(RequestIdFilter.MDC_KEY, "7f3a91c2-5d1e");
+        try {
+            publisher.publish(stream, Map.of("n", "1"));
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
+
+        consumer.pollOnce();
+
+        assertThat(requestIds).containsExactly("7f3a91c2-5d1e");
+        assertThat(MDC.get(RequestIdFilter.MDC_KEY)).isNull();
     }
 
     private static StreamConsumer collecting(

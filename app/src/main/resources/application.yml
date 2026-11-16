@@ -79,3 +79,10 @@ snippet:
       url: ${PRINTSCRIPT_SERVICE_URL:http://localhost:8083}
       versions: ["1.0", "1.1"]
       file-extension: ps
+
+# Formato de los logs en la consola. Local: texto legible, con el requestId y el contexto de cada
+# evento (%kvp). En el stack se prende JSON con LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs (el contexto
+# pasa a ser campos que se filtran: requestId, userId, snippetId...).
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%X{requestId:-}] %logger{36} : %m %kvp%n"

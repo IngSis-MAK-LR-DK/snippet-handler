@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class SnippetService {
 
-    // Changes of state, with what changed. Who did it is in the logging context (user).
+    // Changes of state, with what changed. Who did it is in the logging context (userId).
     private static final Logger LOG = LoggerFactory.getLogger(SnippetService.class);
 
     private final SnippetStore store;
@@ -70,11 +70,11 @@ public class SnippetService {
         Snippet saved =
                 store.save(
                         snippet, content, null, s -> permissions.registerOwner(s.getId(), userId));
-        LOG.info(
-                "snippet created snippetId={} language={} version={}",
-                saved.getId(),
-                saved.getLanguage(),
-                saved.getLanguageVersion());
+        LOG.atInfo()
+                .addKeyValue("snippetId", saved.getId())
+                .addKeyValue("language", saved.getLanguage())
+                .addKeyValue("version", saved.getLanguageVersion())
+                .log("Snippet created");
         return SnippetDetail.of(saved, content);
     }
 
@@ -115,14 +115,17 @@ public class SnippetService {
                                 events.snippetUpdated(id);
                             }
                         });
-        LOG.info("snippet updated snippetId={} sourceChanged={}", id, sourceChanged);
+        LOG.atInfo()
+                .addKeyValue("snippetId", id)
+                .addKeyValue("sourceChanged", sourceChanged)
+                .log("Snippet updated");
         return SnippetDetail.of(saved, content);
     }
 
     public void delete(UUID id) {
         access.require(id, Role.OWNER);
         store.delete(id, () -> permissions.removeSnippet(id));
-        LOG.info("snippet deleted snippetId={}", id);
+        LOG.atInfo().addKeyValue("snippetId", id).log("Snippet deleted");
     }
 
     /** US 7: the target user gets read access over the snippet and its tests. */
@@ -132,7 +135,10 @@ public class SnippetService {
             throw new BadRequestException("A snippet cannot be shared with its owner");
         }
         permissions.share(id, userId);
-        LOG.info("snippet shared snippetId={} with={}", id, userId);
+        LOG.atInfo()
+                .addKeyValue("snippetId", id)
+                .addKeyValue("sharedWith", userId)
+                .log("Snippet shared");
     }
 
     /** Applies the owner's format rules and stores the result. */
@@ -143,12 +149,18 @@ public class SnippetService {
         String current = contents.read(id);
         String formatted = style.format(snippet.getOwnerId(), language, version, current);
         if (formatted.equals(current)) {
-            LOG.info("snippet formatted snippetId={} changed=false", id);
+            LOG.atInfo()
+                    .addKeyValue("snippetId", id)
+                    .addKeyValue("changed", false)
+                    .log("Snippet formatted");
             return SnippetDetail.of(snippet, current);
         }
         snippet.linted(style.lint(snippet.getOwnerId(), language, version, formatted));
         Snippet saved = store.save(snippet, formatted, current, s -> {});
-        LOG.info("snippet formatted snippetId={} changed=true", id);
+        LOG.atInfo()
+                .addKeyValue("snippetId", id)
+                .addKeyValue("changed", true)
+                .log("Snippet formatted");
         return SnippetDetail.of(saved, formatted);
     }
 

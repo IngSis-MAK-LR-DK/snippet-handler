@@ -28,7 +28,7 @@ COPY --from=newrelic /opt/newrelic/newrelic.jar /opt/newrelic/newrelic.yml /app/
 # Apagado por defecto: sin cuenta de New Relic la imagen corre igual que antes. El stack lo prende
 # con NEW_RELIC_AGENT_ENABLED=true y le da la license key y el nombre por ambiente.
 # El log del agente va a la consola (docker logs) y no a un archivo dentro del container; el MDC
-# (user, jobId, snippetId...) viaja con cada log como atributo.
+# (requestId, userId, jobId, snippetId...) viaja con cada log como atributo.
 ENV NEW_RELIC_AGENT_ENABLED=false \
     NEW_RELIC_APP_NAME=snippet-handler \
     NEW_RELIC_LOG_FILE_NAME=STDOUT \

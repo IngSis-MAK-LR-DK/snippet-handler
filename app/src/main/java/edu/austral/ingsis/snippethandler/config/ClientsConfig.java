@@ -14,6 +14,7 @@ import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.http.HttpLanguageService;
 import edu.austral.ingsis.snippethandler.observability.OutboundCallLogging;
+import edu.austral.ingsis.snippethandler.observability.RequestIdForwarding;
 import edu.austral.ingsis.snippethandler.permission.HttpPermissionService;
 import edu.austral.ingsis.snippethandler.permission.PermissionService;
 import edu.austral.ingsis.snippethandler.security.BearerTokenForwardingInterceptor;
@@ -42,11 +43,14 @@ public class ClientsConfig {
 
     /**
      * Applied to the builder every client below is cloned from, so all of them get it: adapters,
-     * assets, both permission clients and Auth0.
+     * assets, both permission clients and Auth0. The request id is an opaque random value, so
+     * sending it to Auth0 too is harmless.
      */
     @Bean
     public RestClientCustomizer outboundCallLogging() {
-        return builder -> builder.requestInterceptor(new OutboundCallLogging(SLOW_CALL));
+        return builder ->
+                builder.requestInterceptor(new RequestIdForwarding())
+                        .requestInterceptor(new OutboundCallLogging(SLOW_CALL));
     }
 
     /**

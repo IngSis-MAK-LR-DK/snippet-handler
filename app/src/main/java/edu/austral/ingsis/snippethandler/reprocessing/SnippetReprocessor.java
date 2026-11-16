@@ -6,7 +6,7 @@ import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
-import edu.austral.ingsis.snippethandler.observability.UserContextFilter;
+import edu.austral.ingsis.snippethandler.observability.UserMdcFilter;
 import edu.austral.ingsis.snippethandler.snippet.LintReport;
 import edu.austral.ingsis.snippethandler.snippet.Snippet;
 import edu.austral.ingsis.snippethandler.snippet.SnippetContents;
@@ -69,13 +69,13 @@ public class SnippetReprocessor {
         ReprocessTask task = found.get();
         ReprocessJob job = jobs.findById(task.getJobId()).orElseThrow();
         // The owner of the job stands for the user: its lines are found like the ones of a request.
-        MDC.put(UserContextFilter.USER, job.getUserId());
+        MDC.put(UserMdcFilter.MDC_KEY, job.getUserId());
         MDC.put(JOB_ID, job.getId().toString());
         MDC.put(SNIPPET_ID, task.getSnippetId().toString());
         try {
             handle(task, job);
         } finally {
-            MDC.remove(UserContextFilter.USER);
+            MDC.remove(UserMdcFilter.MDC_KEY);
             MDC.remove(JOB_ID);
             MDC.remove(SNIPPET_ID);
         }
