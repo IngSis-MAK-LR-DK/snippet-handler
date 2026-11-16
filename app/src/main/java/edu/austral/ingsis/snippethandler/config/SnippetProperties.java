@@ -5,7 +5,10 @@ import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/** Configuration under {@code snippet.*}: where every collaborating service lives. */
+/**
+ * Configuration under {@code snippet.*}: where every collaborating service lives, and who
+ * administers.
+ */
 @ConfigurationProperties("snippet")
 public record SnippetProperties(
         String defaultLanguage,

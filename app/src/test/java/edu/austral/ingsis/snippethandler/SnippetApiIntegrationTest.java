@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
+import edu.austral.ingsis.snippethandler.revalidation.AdapterVersionWatcher;
 import edu.austral.ingsis.snippethandler.support.InMemoryAssetStore;
 import edu.austral.ingsis.snippethandler.testcase.TestCaseRepository;
 import edu.austral.ingsis.snippethandler.testcase.TestStatus;
@@ -45,6 +46,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -99,6 +101,7 @@ class SnippetApiIntegrationTest {
         registry.add("snippet.service-token.auth0-domain", SERVICES::baseUrl);
         registry.add("snippet.service-token.client-id", () -> "handler");
         registry.add("snippet.service-token.client-secret", () -> "secret");
+        registry.add("snippet.revalidation.check-interval", () -> "1h");
     }
 
     @TestConfiguration
@@ -115,6 +118,8 @@ class SnippetApiIntegrationTest {
     @Autowired private InMemoryAssetStore assets;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TestCaseRepository testCases;
+    @Autowired private StringRedisTemplate redis;
+    @Autowired private AdapterVersionWatcher adapterVersions;
 
     @BeforeEach
     void setUp() {
@@ -457,7 +462,7 @@ class SnippetApiIntegrationTest {
     }
 
     @Test
-    void managesAndRunsTests() throws Exception {
+    void managesTests() throws Exception {
         String id = createSnippet("Hello", VALID_SOURCE);
         String testId = createTest(id);
 
@@ -467,31 +472,16 @@ class SnippetApiIntegrationTest {
 
         mvc.perform(
                         as(
-                                MockMvcRequestBuilders.post(
-                                        "/snippets/" + id + "/tests/" + testId + "/run")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PASSED"))
-                .andExpect(jsonPath("$.outputs[0]").value("hi"));
-
-        mvc.perform(
-                        as(
                                 MockMvcRequestBuilders.put("/snippets/" + id + "/tests/" + testId)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .content(
                                                 "{\"name\": \"bye\", \"inputs\": [], \"expectedOutputs\": [\"bye\"]}")))
+                .andExpect(jsonPath("$.name").value("bye"))
                 .andExpect(jsonPath("$.lastStatus").value("PENDING"));
-        mvc.perform(
-                        as(
-                                MockMvcRequestBuilders.post(
-                                        "/snippets/" + id + "/tests/" + testId + "/run")))
-                .andExpect(jsonPath("$.status").value("FAILED"));
 
         mvc.perform(as(MockMvcRequestBuilders.delete("/snippets/" + id + "/tests/" + testId)))
                 .andExpect(status().isNoContent());
-        mvc.perform(
-                        as(
-                                MockMvcRequestBuilders.post(
-                                        "/snippets/" + id + "/tests/" + testId + "/run")))
+        mvc.perform(as(MockMvcRequestBuilders.delete("/snippets/" + id + "/tests/" + testId)))
                 .andExpect(status().isNotFound());
     }
 
@@ -535,36 +525,34 @@ class SnippetApiIntegrationTest {
     }
 
     @Test
-    void aNewLanguageVersionRevalidatesTheStoredSnippetsInTheBackground() throws Exception {
+    void deployingANewAdapterRevalidatesTheStoredSnippetsInTheBackground() throws Exception {
         String id = createSnippet("Hello", VALID_SOURCE);
+        redis.delete("adapter-version:printscript");
+        SERVICES.stubFor(
+                get(urlEqualTo("/version")).willReturn(okJson("{\"version\": \"1.1.2\"}")));
 
-        String body =
-                mvc.perform(
-                                as(
-                                        MockMvcRequestBuilders.post(
-                                                "/languages/printscript/versions/1.0/revalidate")))
-                        .andExpect(status().isAccepted())
-                        .andReturn()
-                        .getResponse()
-                        .getContentAsString();
-        String runId = json.readTree(body).get("id").asText();
+        adapterVersions.check();
+        adapterVersions.check(); // same adapter: nothing new to revalidate
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
                 .untilAsserted(
                         () ->
-                                mvc.perform(
-                                                as(
-                                                        MockMvcRequestBuilders.get(
-                                                                "/languages/revalidations/"
-                                                                        + runId)))
-                                        .andExpect(status().isOk())
-                                        .andExpect(jsonPath("$.status").value("COMPLETED"))
-                                        .andExpect(jsonPath("$.total").value(1))
-                                        .andExpect(jsonPath("$.processed").value(1))
-                                        .andExpect(jsonPath("$.failed").value(0)));
+                                assertThat(
+                                                jdbc.queryForObject(
+                                                        "SELECT count(*) FROM reprocess_task t JOIN"
+                                                                + " reprocess_job j ON j.id = t.job_id"
+                                                                + " WHERE j.type = 'REVALIDATE'"
+                                                                + " AND t.status = 'DONE'",
+                                                        Integer.class))
+                                        .isEqualTo(1));
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT count(*) FROM reprocess_job WHERE type = 'REVALIDATE'",
+                                Integer.class))
+                .isEqualTo(1);
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
-                .andExpect(jsonPath("$.version").value("1.0"));
+                .andExpect(jsonPath("$.version").value("1.1"));
     }
 
     private void awaitReprocessing(int done, int failed) {

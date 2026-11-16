@@ -11,10 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import edu.austral.ingsis.snippethandler.redis.MessageTracing;
+import edu.austral.ingsis.snippethandler.redis.RedisStreamPublisher;
 import edu.austral.ingsis.snippethandler.reprocessing.Streams;
 import edu.austral.ingsis.snippethandler.snippet.SnippetRepository;
-import edu.austral.ingsis.snippethandler.stream.MessageTracing;
-import edu.austral.ingsis.snippethandler.stream.StreamPublisher;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -86,7 +86,7 @@ class SystemStateReporterTest {
 
     @Test
     void saysHowManyMessagesWaitHowManyWereDeliveredAndHowOldTheOldestIs() {
-        StreamPublisher publisher = new StreamPublisher(redis, MessageTracing.NONE);
+        RedisStreamPublisher publisher = new RedisStreamPublisher(redis, MessageTracing.NONE);
         publisher.publish(Streams.SNIPPET_REPROCESS, Map.of("taskId", "1"));
         publisher.publish(Streams.SNIPPET_REPROCESS, Map.of("taskId", "2"));
         redis.opsForStream()

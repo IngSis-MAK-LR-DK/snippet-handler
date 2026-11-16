@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Against a real Redis: delivery, acknowledgement, retry of failures and resuming after a crash.
  */
 @Testcontainers
-class StreamConsumerTest {
+class RedisStreamConsumerTest {
 
     @Container
     static final GenericContainer<?> REDIS =
@@ -35,7 +35,7 @@ class StreamConsumerTest {
 
     private static LettuceConnectionFactory factory;
     private static StringRedisTemplate redis;
-    private static StreamPublisher publisher;
+    private static RedisStreamPublisher publisher;
 
     @BeforeAll
     static void connect() {
@@ -46,7 +46,7 @@ class StreamConsumerTest {
         factory.afterPropertiesSet();
         redis = new StringRedisTemplate(factory);
         redis.afterPropertiesSet();
-        publisher = new StreamPublisher(redis, MessageTracing.NONE);
+        publisher = new RedisStreamPublisher(redis, MessageTracing.NONE);
     }
 
     @AfterAll
@@ -58,7 +58,7 @@ class StreamConsumerTest {
     void deliversAndAcknowledgesEveryMessage() {
         String stream = stream();
         List<String> seen = new ArrayList<>();
-        StreamConsumer consumer = collecting(stream, "a", Duration.ofMillis(50), seen::add);
+        RedisStreamConsumer consumer = collecting(stream, "a", Duration.ofMillis(50), seen::add);
         publisher.publish(stream, Map.of("n", "1"));
         publisher.publish(stream, Map.of("n", "2"));
 
@@ -79,7 +79,7 @@ class StreamConsumerTest {
     @Test
     void acknowledgedMessagesAreRemovedFromTheStreamButPendingOnesStay() {
         String stream = stream();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
@@ -102,7 +102,7 @@ class StreamConsumerTest {
     void aFailedMessageIsDeliveredAgainAfterTheClaimTime() throws InterruptedException {
         String stream = stream();
         List<String> attempts = new ArrayList<>();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
@@ -126,7 +126,7 @@ class StreamConsumerTest {
     @Test
     void anotherConsumerResumesWhatADeadOneLeftUnacknowledged() throws InterruptedException {
         String stream = stream();
-        StreamConsumer dead =
+        RedisStreamConsumer dead =
                 consumer(
                         stream,
                         "dead",
@@ -138,7 +138,8 @@ class StreamConsumerTest {
         dead.pollOnce();
 
         List<String> seen = new ArrayList<>();
-        StreamConsumer survivor = collecting(stream, "survivor", Duration.ofMillis(100), seen::add);
+        RedisStreamConsumer survivor =
+                collecting(stream, "survivor", Duration.ofMillis(100), seen::add);
         assertThat(survivor.pollOnce()).isZero(); // too soon to take it over
         Thread.sleep(150);
         survivor.pollOnce();
@@ -150,7 +151,7 @@ class StreamConsumerTest {
     void theBackgroundLoopKeepsConsumingUntilStopped() {
         String stream = stream();
         List<String> seen = new CopyOnWriteArrayList<>();
-        StreamConsumer consumer = collecting(stream, "loop", Duration.ofMillis(50), seen::add);
+        RedisStreamConsumer consumer = collecting(stream, "loop", Duration.ofMillis(50), seen::add);
 
         consumer.start();
         try {
@@ -167,14 +168,14 @@ class StreamConsumerTest {
     void theLinesLoggedWhileHandlingAMessageSayWhichMessageItIs() {
         String stream = stream();
         List<String> context = new ArrayList<>();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
                         Duration.ofMinutes(5),
                         fields -> {
-                            context.add(MDC.get(StreamConsumer.STREAM));
-                            context.add(MDC.get(StreamConsumer.MESSAGE_ID));
+                            context.add(MDC.get(RedisStreamConsumer.STREAM));
+                            context.add(MDC.get(RedisStreamConsumer.MESSAGE_ID));
                         });
         publisher.publish(stream, Map.of("n", "1"));
 
@@ -183,8 +184,8 @@ class StreamConsumerTest {
         assertThat(context).hasSize(2);
         assertThat(context.get(0)).isEqualTo(stream);
         assertThat(context.get(1)).matches("\\d+-\\d+"); // a Redis entry id
-        assertThat(MDC.get(StreamConsumer.STREAM)).isNull();
-        assertThat(MDC.get(StreamConsumer.MESSAGE_ID)).isNull();
+        assertThat(MDC.get(RedisStreamConsumer.STREAM)).isNull();
+        assertThat(MDC.get(RedisStreamConsumer.MESSAGE_ID)).isNull();
     }
 
     @Test
@@ -214,8 +215,8 @@ class StreamConsumerTest {
                     }
                 };
         List<String> seen = new ArrayList<>();
-        StreamConsumer consumer =
-                new StreamConsumer(
+        RedisStreamConsumer consumer =
+                new RedisStreamConsumer(
                         redis,
                         stream,
                         "g",
@@ -224,7 +225,7 @@ class StreamConsumerTest {
                         Duration.ofMillis(20),
                         fields -> seen.add(fields.get("n")),
                         handling);
-        new StreamPublisher(redis, publishing).publish(stream, Map.of("n", "1"));
+        new RedisStreamPublisher(redis, publishing).publish(stream, Map.of("n", "1"));
 
         consumer.pollOnce();
 
@@ -242,7 +243,7 @@ class StreamConsumerTest {
     void theWorkOfAMessageCarriesTheRequestIdOfWhoeverPublishedIt() {
         String stream = stream();
         List<String> requestIds = new ArrayList<>();
-        StreamConsumer consumer =
+        RedisStreamConsumer consumer =
                 consumer(
                         stream,
                         "a",
@@ -261,7 +262,7 @@ class StreamConsumerTest {
         assertThat(MDC.get(RequestIdFilter.MDC_KEY)).isNull();
     }
 
-    private static StreamConsumer collecting(
+    private static RedisStreamConsumer collecting(
             String stream,
             String name,
             Duration claimIdle,
@@ -269,9 +270,9 @@ class StreamConsumerTest {
         return consumer(stream, name, claimIdle, fields -> onN.accept(fields.get("n")));
     }
 
-    private static StreamConsumer consumer(
+    private static RedisStreamConsumer consumer(
             String stream, String name, Duration claimIdle, StreamMessageHandler handler) {
-        return new StreamConsumer(
+        return new RedisStreamConsumer(
                 redis, stream, "g", name, claimIdle, Duration.ofMillis(20), handler);
     }
 

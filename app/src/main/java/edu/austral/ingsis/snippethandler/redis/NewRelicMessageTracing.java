@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import java.util.HashMap;
 import java.util.Map;

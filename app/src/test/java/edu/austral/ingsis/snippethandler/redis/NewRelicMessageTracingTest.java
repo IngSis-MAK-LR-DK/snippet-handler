@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;

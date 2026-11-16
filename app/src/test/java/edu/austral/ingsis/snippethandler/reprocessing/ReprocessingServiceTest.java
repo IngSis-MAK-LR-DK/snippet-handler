@@ -57,22 +57,12 @@ class ReprocessingServiceTest {
         ReprocessJob job =
                 new ReprocessJob(
                         UUID.randomUUID(), null, ReprocessType.REVALIDATE, "printscript", "1.2");
-        when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
 
-        ReprocessingView view = service.findRevalidation(job.getId());
+        ReprocessingView view = service.view(job);
 
         assertThat(view.status()).isEqualTo(ReprocessingView.Status.RUNNING);
         assertThat(view.version()).isEqualTo("1.2");
         assertThat(view.total()).isZero();
-    }
-
-    @Test
-    void revalidationsAreNotListedAsRuleJobsNorFoundAsOne() {
-        ReprocessJob revalidation = job("auth0|ana");
-        when(jobs.findById(revalidation.getId())).thenReturn(Optional.of(revalidation));
-
-        assertThatThrownBy(() -> service.findRevalidation(revalidation.getId()))
-                .isInstanceOf(NotFoundException.class);
     }
 
     @Test

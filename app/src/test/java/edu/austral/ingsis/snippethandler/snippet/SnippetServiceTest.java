@@ -18,7 +18,6 @@ import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.error.BadRequestException;
 import edu.austral.ingsis.snippethandler.error.InvalidSnippetException;
-import edu.austral.ingsis.snippethandler.events.SnippetEventPublisher;
 import edu.austral.ingsis.snippethandler.language.LanguageRegistry;
 import edu.austral.ingsis.snippethandler.language.LanguageService;
 import edu.austral.ingsis.snippethandler.language.LanguageServiceException;
@@ -31,6 +30,7 @@ import edu.austral.ingsis.snippethandler.rules.RuleService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -44,7 +44,7 @@ class SnippetServiceTest {
     private final SnippetContents contents = mock(SnippetContents.class);
     private final PermissionService permissions = mock(PermissionService.class);
     private final RuleService rules = mock(RuleService.class);
-    private final SnippetEventPublisher events = mock(SnippetEventPublisher.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final LanguageService printScript = mock(LanguageService.class);
 
     private SnippetService service;
@@ -167,7 +167,7 @@ class SnippetServiceTest {
 
         verify(printScript).validate("y;", "1.0");
         verify(contents).write(ID, "y;", "x;");
-        verify(events).snippetUpdated(ID);
+        verify(events).publishEvent(new SnippetUpdated(ID));
     }
 
     @Test
@@ -181,7 +181,7 @@ class SnippetServiceTest {
         assertThat(detail.version()).isEqualTo("1.1");
         verify(printScript).validate("x;", "1.1");
         verify(contents, never()).write(any(), any(), any());
-        verify(events).snippetUpdated(ID);
+        verify(events).publishEvent(new SnippetUpdated(ID));
     }
 
     @Test

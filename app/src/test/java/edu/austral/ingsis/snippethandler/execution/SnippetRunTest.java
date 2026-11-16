@@ -91,7 +91,7 @@ class SnippetRunTest {
     void aSavedTestStreamsItsOutputAndRecordsTheOutcome() {
         TestCase saved = new TestCase(SNIPPET_ID, "t", List.of("Ana"), List.of("hola Ana"));
         ReflectionTestUtils.setField(saved, "id", TEST_ID);
-        when(tests.test(SNIPPET_ID, TEST_ID)).thenReturn(saved);
+        when(tests.findTest(SNIPPET_ID, TEST_ID)).thenReturn(saved);
 
         run.handle(message("{\"type\":\"test\",\"testId\":\"" + TEST_ID + "\"}"));
         assertThat(request.get().inputs()).containsExactly("Ana");
@@ -124,7 +124,7 @@ class SnippetRunTest {
 
     @Test
     void aTestOfAnotherSnippetIsRefused() {
-        when(tests.test(SNIPPET_ID, TEST_ID)).thenThrow(new NotFoundException("no such test"));
+        when(tests.findTest(SNIPPET_ID, TEST_ID)).thenThrow(new NotFoundException("no such test"));
 
         run.handle(message("{\"type\":\"test\",\"testId\":\"" + TEST_ID + "\"}"));
 

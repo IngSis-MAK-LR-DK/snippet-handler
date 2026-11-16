@@ -68,7 +68,7 @@ public class SnippetExecutionService {
 
     /** The saved test {@code testId} of the snippet. */
     public TestDefinition savedTest(Snippet snippet, UUID testId) {
-        return TestDefinition.of(tests.test(snippet.getId(), testId));
+        return TestDefinition.of(tests.findTest(snippet.getId(), testId));
     }
 
     /**

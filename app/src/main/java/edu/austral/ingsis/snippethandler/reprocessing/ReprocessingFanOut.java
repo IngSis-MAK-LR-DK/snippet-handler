@@ -4,9 +4,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import edu.austral.ingsis.snippethandler.redis.RedisStreamPublisher;
 import edu.austral.ingsis.snippethandler.snippet.Compliance;
 import edu.austral.ingsis.snippethandler.snippet.SnippetRepository;
-import edu.austral.ingsis.snippethandler.stream.StreamPublisher;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionOperations;
@@ -23,14 +23,14 @@ public class ReprocessingFanOut {
     private final ReprocessJobRepository jobs;
     private final ReprocessTaskRepository tasks;
     private final SnippetRepository snippets;
-    private final StreamPublisher streams;
+    private final RedisStreamPublisher streams;
     private final TransactionOperations transaction;
 
     public ReprocessingFanOut(
             ReprocessJobRepository jobs,
             ReprocessTaskRepository tasks,
             SnippetRepository snippets,
-            StreamPublisher streams,
+            RedisStreamPublisher streams,
             TransactionOperations transaction) {
         this.jobs = jobs;
         this.tasks = tasks;

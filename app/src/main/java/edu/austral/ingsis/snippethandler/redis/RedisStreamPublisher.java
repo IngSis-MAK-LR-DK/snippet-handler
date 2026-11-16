@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  * its log lines are found with the id of the request that caused it.
  */
 @Component
-public class StreamPublisher {
+public class RedisStreamPublisher {
 
     /** Field of the message with the request id of whoever published it. */
     public static final String REQUEST_ID = "requestId";
@@ -24,7 +24,7 @@ public class StreamPublisher {
     private final StringRedisTemplate redis;
     private final MessageTracing tracing;
 
-    public StreamPublisher(StringRedisTemplate redis, MessageTracing tracing) {
+    public RedisStreamPublisher(StringRedisTemplate redis, MessageTracing tracing) {
         this.redis = redis;
         this.tracing = tracing;
     }

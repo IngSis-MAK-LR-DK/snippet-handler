@@ -1,4 +1,4 @@
-package edu.austral.ingsis.snippethandler.stream;
+package edu.austral.ingsis.snippethandler.redis;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -30,9 +30,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * processing resume after a crash and retry after a failure. Entries are deleted once they are
  * acknowledged, so a stream must be read by one group only.
  */
-public class StreamConsumer implements SmartLifecycle {
+public class RedisStreamConsumer implements SmartLifecycle {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StreamConsumer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RedisStreamConsumer.class);
     private static final int BATCH = 50;
     private static final Duration RETRY_BACKOFF = Duration.ofSeconds(5);
     static final String STREAM = "stream";
@@ -51,7 +51,7 @@ public class StreamConsumer implements SmartLifecycle {
     private volatile boolean groupReady;
     private Thread thread;
 
-    public StreamConsumer(
+    public RedisStreamConsumer(
             StringRedisTemplate redis,
             String stream,
             String group,
@@ -62,7 +62,7 @@ public class StreamConsumer implements SmartLifecycle {
         this(redis, stream, group, name, claimIdle, pollInterval, handler, MessageTracing.NONE);
     }
 
-    public StreamConsumer(
+    public RedisStreamConsumer(
             StringRedisTemplate redis,
             String stream,
             String group,
@@ -111,7 +111,7 @@ public class StreamConsumer implements SmartLifecycle {
         MDC.put(STREAM, stream);
         MDC.put(MESSAGE_ID, record.getId().getValue());
         // The request that published it, if any: its id finds this work along with the request.
-        String requestId = record.getValue().get(StreamPublisher.REQUEST_ID);
+        String requestId = record.getValue().get(RedisStreamPublisher.REQUEST_ID);
         if (requestId != null) {
             MDC.put(RequestIdFilter.MDC_KEY, requestId);
         }

@@ -15,9 +15,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import edu.austral.ingsis.snippethandler.language.RuleType;
+import edu.austral.ingsis.snippethandler.redis.RedisStreamPublisher;
 import edu.austral.ingsis.snippethandler.snippet.Compliance;
 import edu.austral.ingsis.snippethandler.snippet.SnippetRepository;
-import edu.austral.ingsis.snippethandler.stream.StreamPublisher;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,7 +31,7 @@ class ReprocessingFanOutTest {
     private final ReprocessJobRepository jobs = mock(ReprocessJobRepository.class);
     private final ReprocessTaskRepository tasks = mock(ReprocessTaskRepository.class);
     private final SnippetRepository snippets = mock(SnippetRepository.class);
-    private final StreamPublisher streams = mock(StreamPublisher.class);
+    private final RedisStreamPublisher streams = mock(RedisStreamPublisher.class);
     private final ReprocessingFanOut fanOut =
             new ReprocessingFanOut(
                     jobs, tasks, snippets, streams, TransactionOperations.withoutTransaction());
