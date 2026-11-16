@@ -620,6 +620,19 @@ class SnippetApiIntegrationTest {
                         .withRequestBody(equalToJson("{\"rules\": []}", true, true)));
         mvc.perform(as(MockMvcRequestBuilders.get("/snippets/" + id)))
                 .andExpect(jsonPath("$.compliance").value("NOT_COMPLIANT"));
+
+        // Each change of rules queued a background job: let them end here, or they would run
+        // during a later test and mark its snippets as PENDING.
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .untilAsserted(
+                        () ->
+                                mvc.perform(as(MockMvcRequestBuilders.get("/rules/reprocessing")))
+                                        .andExpect(jsonPath("$", hasSize(2)))
+                                        .andExpect(
+                                                jsonPath(
+                                                        "$[?(@.status != 'COMPLETED')]",
+                                                        hasSize(0))));
     }
 
     @Test

@@ -37,7 +37,11 @@ public class SecurityConfig {
                                         .permitAll()
                                         .anyRequest()
                                         .authenticated())
-                .oauth2ResourceServer(oauth -> oauth.jwt(withDefaults()))
+                // The token can also come as WebSocket subprotocol (streamed runs, US 9 and 10).
+                .oauth2ResourceServer(
+                        oauth ->
+                                oauth.bearerTokenResolver(new WebSocketBearerTokenResolver())
+                                        .jwt(withDefaults()))
                 .addFilterAfter(new UserMdcFilter(), BearerTokenAuthenticationFilter.class)
                 .build();
     }

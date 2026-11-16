@@ -9,4 +9,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
     testImplementation(libs.wiremock)
+    // Un adaptador falso con WebSocket para probar WebSocketStreamRunner: el Tomcat que ya usa la app.
+    testImplementation("org.apache.tomcat.embed:tomcat-embed-websocket")
+    testImplementation("org.assertj:assertj-core")
 }

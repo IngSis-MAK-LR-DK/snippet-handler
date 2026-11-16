@@ -119,10 +119,7 @@ public class TestCaseService {
         try {
             SnippetRunner runner = languages.get(snippet.getLanguage());
             result = runner.execute(content, snippet.getLanguageVersion(), inputs);
-            status =
-                    result.successful() && result.outputs().equals(expectedOutputs)
-                            ? TestStatus.PASSED
-                            : TestStatus.FAILED;
+            status = statusOf(result.outputs(), result.errors(), expectedOutputs);
         } catch (LanguageServiceException e) {
             LOG.warn("Could not run test {} of snippet {}", testId, snippet.getId(), e);
             result = new ExecutionResult(List.of(), List.of(e.getMessage()));
@@ -130,6 +127,31 @@ public class TestCaseService {
         }
         return new TestRunResult(
                 testId, status, result.outputs(), expectedOutputs, result.errors());
+    }
+
+    /** A test passes when the run had no errors and printed exactly the expected lines. */
+    public static TestStatus statusOf(
+            List<String> outputs, List<String> errors, List<String> expectedOutputs) {
+        return errors.isEmpty() && outputs.equals(expectedOutputs)
+                ? TestStatus.PASSED
+                : TestStatus.FAILED;
+    }
+
+    /**
+     * A saved test of the snippet. No permission check: the caller already checked it can read the
+     * snippet.
+     *
+     * @throws NotFoundException if the snippet has no such test
+     */
+    public TestCase test(UUID snippetId, UUID testId) {
+        return find(snippetId, testId);
+    }
+
+    /** Records the outcome of running a saved test outside this service (a streamed run). */
+    public void recordRun(UUID snippetId, UUID testId, TestStatus status) {
+        TestCase test = find(snippetId, testId);
+        test.ran(status);
+        repository.save(test);
     }
 
     private TestCase find(UUID snippetId, UUID testId) {
