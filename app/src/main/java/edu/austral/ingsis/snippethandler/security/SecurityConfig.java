@@ -5,12 +5,14 @@ import static org.springframework.security.config.Customizer.withDefaults;
 import java.util.List;
 
 import edu.austral.ingsis.snippethandler.config.SnippetProperties;
+import edu.austral.ingsis.snippethandler.observability.UserMdcFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -36,6 +38,7 @@ public class SecurityConfig {
                                         .anyRequest()
                                         .authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(withDefaults()))
+                .addFilterAfter(new UserMdcFilter(), BearerTokenAuthenticationFilter.class)
                 .build();
     }
 

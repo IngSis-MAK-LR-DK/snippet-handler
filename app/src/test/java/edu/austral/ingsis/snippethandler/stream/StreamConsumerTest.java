@@ -9,10 +9,13 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import edu.austral.ingsis.snippethandler.observability.RequestIdFilter;
+
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -43,7 +46,7 @@ class StreamConsumerTest {
         factory.afterPropertiesSet();
         redis = new StringRedisTemplate(factory);
         redis.afterPropertiesSet();
-        publisher = new StreamPublisher(redis);
+        publisher = new StreamPublisher(redis, MessageTracing.NONE);
     }
 
     @AfterAll
@@ -158,6 +161,104 @@ class StreamConsumerTest {
             consumer.stop();
         }
         assertThat(consumer.isRunning()).isFalse();
+    }
+
+    @Test
+    void theLinesLoggedWhileHandlingAMessageSayWhichMessageItIs() {
+        String stream = stream();
+        List<String> context = new ArrayList<>();
+        StreamConsumer consumer =
+                consumer(
+                        stream,
+                        "a",
+                        Duration.ofMinutes(5),
+                        fields -> {
+                            context.add(MDC.get(StreamConsumer.STREAM));
+                            context.add(MDC.get(StreamConsumer.MESSAGE_ID));
+                        });
+        publisher.publish(stream, Map.of("n", "1"));
+
+        consumer.pollOnce();
+
+        assertThat(context).hasSize(2);
+        assertThat(context.get(0)).isEqualTo(stream);
+        assertThat(context.get(1)).matches("\\d+-\\d+"); // a Redis entry id
+        assertThat(MDC.get(StreamConsumer.STREAM)).isNull();
+        assertThat(MDC.get(StreamConsumer.MESSAGE_ID)).isNull();
+    }
+
+    @Test
+    void theTraceOfThePublisherTravelsWithTheMessageToItsHandler() {
+        String stream = stream();
+        MessageTracing publishing =
+                new MessageTracing() {
+                    @Override
+                    public Map<String, String> outgoing() {
+                        return Map.of(PREFIX + "traceparent", "00-abc");
+                    }
+
+                    @Override
+                    public void handling(String s, Map<String, String> fields) {}
+                };
+        List<Map<String, String>> continued = new ArrayList<>();
+        MessageTracing handling =
+                new MessageTracing() {
+                    @Override
+                    public Map<String, String> outgoing() {
+                        return Map.of();
+                    }
+
+                    @Override
+                    public void handling(String s, Map<String, String> fields) {
+                        continued.add(fields);
+                    }
+                };
+        List<String> seen = new ArrayList<>();
+        StreamConsumer consumer =
+                new StreamConsumer(
+                        redis,
+                        stream,
+                        "g",
+                        "a",
+                        Duration.ofMinutes(5),
+                        Duration.ofMillis(20),
+                        fields -> seen.add(fields.get("n")),
+                        handling);
+        new StreamPublisher(redis, publishing).publish(stream, Map.of("n", "1"));
+
+        consumer.pollOnce();
+
+        assertThat(seen).containsExactly("1");
+        assertThat(continued)
+                .singleElement()
+                .satisfies(
+                        fields ->
+                                assertThat(fields)
+                                        .containsEntry("n", "1")
+                                        .containsEntry("trace.traceparent", "00-abc"));
+    }
+
+    @Test
+    void theWorkOfAMessageCarriesTheRequestIdOfWhoeverPublishedIt() {
+        String stream = stream();
+        List<String> requestIds = new ArrayList<>();
+        StreamConsumer consumer =
+                consumer(
+                        stream,
+                        "a",
+                        Duration.ofMinutes(5),
+                        fields -> requestIds.add(MDC.get(RequestIdFilter.MDC_KEY)));
+        MDC.put(RequestIdFilter.MDC_KEY, "7f3a91c2-5d1e");
+        try {
+            publisher.publish(stream, Map.of("n", "1"));
+        } finally {
+            MDC.remove(RequestIdFilter.MDC_KEY);
+        }
+
+        consumer.pollOnce();
+
+        assertThat(requestIds).containsExactly("7f3a91c2-5d1e");
+        assertThat(MDC.get(RequestIdFilter.MDC_KEY)).isNull();
     }
 
     private static StreamConsumer collecting(

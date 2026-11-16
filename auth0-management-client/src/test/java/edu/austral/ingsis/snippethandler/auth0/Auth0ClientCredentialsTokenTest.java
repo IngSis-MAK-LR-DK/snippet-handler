@@ -9,7 +9,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
@@ -90,11 +92,58 @@ class Auth0ClientCredentialsTokenTest {
     }
 
     @Test
+    void aRefusalSaysWhyAndForWhichClientButNeverTheSecret() {
+        stubFor(
+                post("/oauth/token")
+                        .willReturn(
+                                aResponse()
+                                        .withStatus(403)
+                                        .withHeader("Content-Type", "application/json")
+                                        .withBody(
+                                                """
+                                                {"error": "unauthorized_client",
+                                                 "error_description": "Grant type not allowed"}
+                                                """)));
+
+        Auth0TokenException error =
+                assertThrows(
+                        Auth0TokenException.class,
+                        () -> token(Clock.fixed(NOW, ZoneOffset.UTC)).get());
+
+        assertContains(
+                error.getMessage(),
+                "status=403",
+                "error=unauthorized_client",
+                "description=Grant type not allowed",
+                "clientId=client",
+                "audience=https://api");
+        assertFalse(error.getMessage().contains("secret"), error.getMessage());
+    }
+
+    @Test
+    void aRefusalWithoutDetailsStillSaysTheStatus() {
+        stubFor(post("/oauth/token").willReturn(aResponse().withStatus(500).withBody("oops")));
+
+        Auth0TokenException error =
+                assertThrows(
+                        Auth0TokenException.class,
+                        () -> token(Clock.fixed(NOW, ZoneOffset.UTC)).get());
+
+        assertContains(error.getMessage(), "status=500", "error=unknown");
+    }
+
+    @Test
     void responseWithoutTokenIsReportedAsTokenError() {
         stubFor(post("/oauth/token").willReturn(okJson("{\"expires_in\": 3600}")));
 
         assertThrows(
                 Auth0TokenException.class, () -> token(Clock.fixed(NOW, ZoneOffset.UTC)).get());
+    }
+
+    private static void assertContains(String message, String... parts) {
+        for (String part : parts) {
+            assertTrue(message.contains(part), () -> message + " should contain " + part);
+        }
     }
 
     private static final class MutableClock extends Clock {
