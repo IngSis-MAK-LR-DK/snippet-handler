@@ -101,6 +101,11 @@ public class SnippetController {
         return queries.get(id);
     }
 
+    @GetMapping("/topo")
+    public String saludoTopo() {
+        return "Hola Topo";
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         snippets.delete(id);
