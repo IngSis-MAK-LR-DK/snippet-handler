@@ -55,3 +55,31 @@ jobs:
             gpr_key=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Despliegue automatico a dev: avisa al repo de infra que hay una imagen nueva, para que fije la
+  # version en versions.env y despliegue (ver docs/auto-deploy-dev.md en snippet-searcher-infra).
+  # Solo al publicar desde main: en un pull request la imagen no se sube, no hay nada que avisar.
+  notify-infra:
+    needs: image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SERVICE: snippet-handler
+      GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+    steps:
+      # Sin el secreto no se rompe la publicacion de la imagen: solo se avisa que hay que fijar la
+      # version a mano (./scripts/pin-versions.sh en infra).
+      - name: Avisar a infra
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Falta el secreto INFRA_DISPATCH_TOKEN: no se avisa a infra"
+            exit 0
+          fi
+          gh api repos/IngSis-MAK-LR-DK/snippet-searcher-infra/dispatches \
+            -f event_type=image-published \
+            -f "client_payload[service]=${SERVICE}" \
+            -f "client_payload[tag]=sha-${GITHUB_SHA::7}" \
+            -f "client_payload[commit]=${GITHUB_SHA}" \
+            -f "client_payload[run_url]=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
